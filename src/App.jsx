@@ -1,22 +1,21 @@
-// أضف هذا السطر مع بقية الـ imports في الأعلى
-import { BrowserRouter, Routes, Route, useNavigate, useParams } from 'react-router-dom';
-/* global __firebase_config, __app_id, __initial_auth_token */
 import React, { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, Package, PlusCircle, ShoppingCart, Trash2, 
   TrendingUp, Users, Image as ImageIcon, CheckCircle, Lock, 
   Eye, EyeOff, LogOut, ShoppingBag, X, Phone, MapPin, Loader, UploadCloud, Edit, Plus,
-  ArrowLeft, ChevronRight, Star, Share2
+  ArrowLeft, ChevronRight, Star, Share2, Truck, Save, Map, Filter
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
   getFirestore, collection, addDoc, onSnapshot, deleteDoc, 
-  doc, updateDoc, getDoc
+  doc, updateDoc, getDoc, setDoc
 } from 'firebase/firestore';
 import { 
   getAuth, signInAnonymously, signInWithCustomToken, 
   onAuthStateChanged 
 } from 'firebase/auth';
+
+/* global __firebase_config, __app_id, __initial_auth_token */
 
 // --- Configuration Firebase ---
 const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
@@ -34,6 +33,18 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+// --- Constants ---
+const WILAYAS = [
+  "Adrar", "Chlef", "Laghouat", "Oum El Bouaghi", "Batna", "Béjaïa", "Biskra", "Béchar",
+  "Blida", "Bouira", "Tamanrasset", "Tébessa", "Tlemcen", "Tiaret", "Tizi Ouzou", "Alger",
+  "Djelfa", "Jijel", "Sétif", "Saïda", "Skikda", "Sidi Bel Abbès", "Annaba", "Guelma",
+  "Constantine", "Médéa", "Mostaganem", "M'Sila", "Mascara", "Ouargla", "Oran", "El Bayadh",
+  "Illizi", "Bordj Bou Arréridj", "Boumerdès", "El Tarf", "Tindouf", "Tissemsilt", "El Oued",
+  "Khenchela", "Souk Ahras", "Tipaza", "Mila", "Aïn Defla", "Naâma", "Aïn Témouchent",
+  "Ghardaïa", "Relizane", "Timimoun", "Bordj Badji Mokhtar", "Ouled Djellal", "Béni Abbès",
+  "In Salah", "In Guezzam", "Touggourt", "Djanet", "El M'Ghair", "El Meniaa"
+];
 
 // --- Styles Globaux ---
 const GlobalStyles = () => (
@@ -85,6 +96,7 @@ const AdminPanel = ({ onBackToStore }) => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [products, setProducts] = useState([]);
   const [orders, setOrders] = useState([]);
+  const [deliveryFees, setDeliveryFees] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   const [loginData, setLoginData] = useState({ username: '', password: '' });
@@ -92,10 +104,12 @@ const AdminPanel = ({ onBackToStore }) => {
   const [loginError, setLoginError] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
-  // حالة لتعديل المنتج
+  // État pour l'édition
   const [editingProduct, setEditingProduct] = useState(null);
 
-  // تحديث الحالة لتشمل مصفوفة الصور والألوان
+  // Local state for fee editing to avoid constant re-renders from Firebase
+  const [localFees, setLocalFees] = useState({});
+
   const [newProduct, setNewProduct] = useState({
     name: '',
     price: '',
@@ -103,7 +117,7 @@ const AdminPanel = ({ onBackToStore }) => {
     description: '',
     images: [],
     sizes: [],
-    colors: [] // إضافة مصفوفة الألوان
+    colors: []
   });
 
   const AVAILABLE_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL'];
@@ -143,9 +157,21 @@ const AdminPanel = ({ onBackToStore }) => {
       setOrders(ords);
     }, (error) => console.error("Orders fetch error:", error));
 
+    const feesRef = collection(db, 'artifacts', appId, 'public', 'data', 'delivery_fees');
+    const unsubscribeFees = onSnapshot(feesRef, (snapshot) => {
+      const feesMap = {};
+      snapshot.docs.forEach(doc => {
+        feesMap[doc.id] = doc.data();
+      });
+      setDeliveryFees(feesMap);
+      // Initialize local state for editing
+      setLocalFees(prev => ({...feesMap, ...prev}));
+    });
+
     return () => {
       unsubscribeProducts();
       unsubscribeOrders();
+      unsubscribeFees();
     };
   }, [user, isAuthenticated]);
 
@@ -165,13 +191,39 @@ const AdminPanel = ({ onBackToStore }) => {
     }, 1000);
   };
 
-  // دالة التعامل مع رفع صور متعددة (للإضافة)
+  // FIX: Robust state update to prevent undefined values
+  const handleFeeChange = (wilaya, type, value) => {
+    setLocalFees(prev => {
+      // Ensure we have a base object if it doesn't exist yet
+      const currentData = prev[wilaya] || { home: 800, desk: 400 };
+      
+      return {
+        ...prev,
+        [wilaya]: {
+          ...currentData,
+          [type]: value === '' ? 0 : (parseInt(value) || 0)
+        }
+      };
+    });
+  };
+
+  const saveFee = async (wilaya) => {
+    const feeData = localFees[wilaya] || { home: 800, desk: 400 };
+    try {
+      await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'delivery_fees', wilaya), feeData);
+      alert(`Tarifs mis à jour pour ${wilaya}`);
+    } catch (e) {
+      console.error(e);
+      alert("Erreur lors de la sauvegarde");
+    }
+  };
+
   const handleImagesUpload = (e) => {
     const files = Array.from(e.target.files);
     
     files.forEach(file => {
       if (file.size > 500 * 1024) { 
-        alert(`الصورة ${file.name} كبيرة جداً. يرجى اختيار صور أقل من 500 ك.ب.`);
+        alert(`L'image ${file.name} est trop volumineuse (max 500kb).`);
         return;
       }
       const reader = new FileReader();
@@ -185,7 +237,6 @@ const AdminPanel = ({ onBackToStore }) => {
     });
   };
 
-  // حذف صورة من قائمة الإضافة
   const removeNewProductImage = (index) => {
     setNewProduct(prev => ({
       ...prev,
@@ -225,7 +276,7 @@ const AdminPanel = ({ onBackToStore }) => {
       const productsRef = collection(db, 'artifacts', appId, 'public', 'data', 'products');
       await addDoc(productsRef, {
         ...newProduct,
-        image: newProduct.images[0], // حفظ الصورة الأولى كصورة رئيسية للتوافق
+        image: newProduct.images[0], // Fallback image principale
         price: parseFloat(newProduct.price),
         createdAt: new Date().toISOString()
       });
@@ -254,7 +305,7 @@ const AdminPanel = ({ onBackToStore }) => {
     setEditingProduct({ 
       ...product, 
       images: initialImages,
-      colors: product.colors || [] // التأكد من تحميل الألوان الموجودة
+      colors: product.colors || []
     });
   };
 
@@ -399,6 +450,7 @@ const AdminPanel = ({ onBackToStore }) => {
           <button onClick={() => setActiveTab('dashboard')} className={`flex items-center gap-3 p-3 rounded-lg transition-all ${activeTab === 'dashboard' ? 'bg-amber-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}><LayoutDashboard size={20} /><span>Tableau de bord</span></button>
           <button onClick={() => setActiveTab('products')} className={`flex items-center gap-3 p-3 rounded-lg transition-all ${activeTab === 'products' ? 'bg-amber-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}><Package size={20} /><span>Produits</span></button>
           <button onClick={() => setActiveTab('add-product')} className={`flex items-center gap-3 p-3 rounded-lg transition-all ${activeTab === 'add-product' ? 'bg-amber-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}><PlusCircle size={20} /><span>Ajouter un produit</span></button>
+          <button onClick={() => setActiveTab('delivery')} className={`flex items-center gap-3 p-3 rounded-lg transition-all ${activeTab === 'delivery' ? 'bg-amber-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}><Truck size={20} /><span>Livraison (التوصيل)</span></button>
           <button onClick={() => setActiveTab('orders')} className={`flex items-center gap-3 p-3 rounded-lg transition-all ${activeTab === 'orders' ? 'bg-amber-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}><ShoppingCart size={20} /><span>Commandes</span> {orders.filter(o => o.status === 'pending').length > 0 && <span className="ml-auto bg-red-500 text-white font-bold text-[10px] px-2 py-0.5 rounded-full">{orders.filter(o => o.status === 'pending').length}</span>}</button>
         </nav>
         <div className="mt-auto space-y-4">
@@ -414,6 +466,7 @@ const AdminPanel = ({ onBackToStore }) => {
               {activeTab === 'dashboard' && 'Aperçu de la boutique'}
               {activeTab === 'products' && 'Gestion des produits'}
               {activeTab === 'add-product' && 'Ajouter une nouvelle pièce'}
+              {activeTab === 'delivery' && 'Tarifs de Livraison'}
               {activeTab === 'orders' && 'Commandes clients'}
             </h2>
           </div>
@@ -443,7 +496,6 @@ const AdminPanel = ({ onBackToStore }) => {
                     <tr><td colSpan="4" className="p-8 text-center text-slate-400 italic">Aucun produit ajouté. Allez dans l'onglet "Ajouter un produit".</td></tr>
                   )}
                   {products.map((p) => {
-                    // Logic to show thumbnail
                     const thumbnail = (p.images && p.images.length > 0) ? p.images[0] : p.image;
                     return (
                     <tr key={p.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
@@ -459,7 +511,6 @@ const AdminPanel = ({ onBackToStore }) => {
                           </div>
                           <div>
                             <p className="font-bold text-slate-800">{p.name}</p>
-                            {/* عرض المقاسات هنا */}
                             {p.sizes && p.sizes.length > 0 && (
                               <div className="flex gap-1 mt-1 flex-wrap">
                                 {p.sizes.map(s => (
@@ -467,7 +518,6 @@ const AdminPanel = ({ onBackToStore }) => {
                                 ))}
                               </div>
                             )}
-                             {/* عرض الألوان هنا */}
                              {p.colors && p.colors.length > 0 && (
                               <div className="flex gap-1 mt-1 flex-wrap">
                                 {p.colors.map(c => (
@@ -617,7 +667,7 @@ const AdminPanel = ({ onBackToStore }) => {
               </div>
               <div><label className="text-sm font-bold text-slate-700">Catégorie</label><select className="w-full mt-2 p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none transition-all" value={newProduct.category} onChange={(e) => setNewProduct({...newProduct, category: e.target.value})}><option>Costumes</option><option>Chemises</option><option>Chaussures</option><option>Accessoires</option><option>Manteaux</option><option>Pantalon</option></select></div>
               
-              {/* قسم اختيار المقاسات */}
+              {/* Size Select */}
               <div>
                 <label className="text-sm font-bold text-slate-700 block mb-2">Tailles disponibles</label>
                 <div className="flex flex-wrap gap-2">
@@ -639,7 +689,7 @@ const AdminPanel = ({ onBackToStore }) => {
                 {newProduct.sizes.length === 0 && <p className="text-xs text-amber-600 mt-2 font-medium">Aucune taille sélectionnée (optionnel)</p>}
               </div>
 
-              {/* قسم اختيار الألوان */}
+              {/* Color Select */}
               <div>
                 <label className="text-sm font-bold text-slate-700 block mb-2">Couleurs disponibles</label>
                 <div className="flex flex-wrap gap-2">
@@ -684,7 +734,7 @@ const AdminPanel = ({ onBackToStore }) => {
                   )}
 
                   <div className="flex flex-col items-center justify-center relative hover:bg-slate-100 transition-colors rounded-lg p-4 cursor-pointer">
-                     <input 
+                      <input 
                       type="file" 
                       accept="image/*"
                       multiple
@@ -709,6 +759,74 @@ const AdminPanel = ({ onBackToStore }) => {
           </div>
         )}
 
+        {activeTab === 'delivery' && (
+          <div className="bg-white rounded-2xl shadow-sm overflow-hidden animate-fade-in">
+             <div className="p-6 border-b border-slate-100">
+               <h3 className="text-lg font-bold text-slate-800">Gestion des Tarifs de Livraison (Wilayas)</h3>
+               <p className="text-sm text-slate-500">Définissez les prix de livraison pour chaque wilaya. Cliquez sur l'icône de sauvegarde pour enregistrer.</p>
+             </div>
+             <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead className="bg-slate-50 border-b border-slate-100">
+                    <tr>
+                      <th className="p-4 text-sm font-semibold text-slate-600">Wilaya</th>
+                      <th className="p-4 text-sm font-semibold text-slate-600">Prix Bureau (Stop Desk)</th>
+                      <th className="p-4 text-sm font-semibold text-slate-600">Prix Domicile</th>
+                      <th className="p-4 text-sm font-semibold text-slate-600 w-24">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {WILAYAS.map((wilaya, index) => {
+                      // FIX: Safe access to properties to avoid uncontrolled input warning
+                      const fees = localFees[wilaya] || { home: 800, desk: 400 };
+                      const deskVal = fees.desk !== undefined ? fees.desk : 400;
+                      const homeVal = fees.home !== undefined ? fees.home : 800;
+                      
+                      return (
+                        <tr key={wilaya} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+                           <td className="p-4 font-bold text-slate-700">
+                             <span className="inline-block w-8 text-slate-400 font-normal text-xs">{index + 1}</span> {wilaya}
+                           </td>
+                           <td className="p-4">
+                              <div className="relative max-w-[150px]">
+                                <input 
+                                  type="number" 
+                                  value={deskVal}
+                                  onChange={(e) => handleFeeChange(wilaya, 'desk', e.target.value)}
+                                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none text-sm"
+                                />
+                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">DA</span>
+                              </div>
+                           </td>
+                           <td className="p-4">
+                              <div className="relative max-w-[150px]">
+                                <input 
+                                  type="number" 
+                                  value={homeVal}
+                                  onChange={(e) => handleFeeChange(wilaya, 'home', e.target.value)}
+                                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none text-sm"
+                                />
+                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">DA</span>
+                              </div>
+                           </td>
+                           <td className="p-4">
+                              <button 
+                                onClick={() => saveFee(wilaya)}
+                                className="p-2 bg-amber-50 text-amber-600 rounded-lg hover:bg-amber-100 transition-colors"
+                                title="Enregistrer"
+                              >
+                                <Save size={18} />
+                              </button>
+                           </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+             </div>
+          </div>
+        )}
+
         {activeTab === 'orders' && (
           <div className="space-y-4 animate-fade-in">
              {orders.length === 0 && (
@@ -717,24 +835,33 @@ const AdminPanel = ({ onBackToStore }) => {
             {orders.map((order) => (
               <div key={order.id} className="bg-white p-6 rounded-2xl shadow-sm border-l-4 border-amber-500 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 transition-all hover:shadow-md">
                 <div className="flex-1">
-                  <h4 className="font-bold text-lg text-slate-800">{order.customerName}</h4>
-                  <p className="text-sm text-slate-500 font-medium">{order.customerPhone} • {order.total.toLocaleString()} DZD</p>
+                  <div className="flex justify-between items-start mb-2">
+                      <div>
+                        <h4 className="font-bold text-lg text-slate-800">{order.customerName}</h4>
+                        <p className="text-sm text-slate-500 font-medium">{order.customerPhone}</p>
+                      </div>
+                      <div className="text-right">
+                         <p className="text-lg font-bold text-slate-800">{order.total.toLocaleString()} DZD</p>
+                         <div className={`text-xs font-bold px-2 py-1 rounded inline-flex items-center gap-1 mt-1 ${order.deliveryType === 'home' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'}`}>
+                            <Truck size={12} /> {order.deliveryType === 'home' ? 'Domicile' : 'Bureau (Stop Desk)'}
+                         </div>
+                      </div>
+                  </div>
+                  
                   <div className="flex flex-wrap gap-2 mt-2">
                     <span className="text-xs bg-slate-100 text-slate-500 px-2 py-1 rounded">{new Date(order.createdAt).toLocaleDateString()}</span>
-                    <span className="text-xs bg-slate-100 text-slate-500 px-2 py-1 rounded">{order.customerWilaya}</span>
+                    <span className="text-xs bg-slate-100 text-slate-500 px-2 py-1 rounded">{order.customerWilaya} - {order.customerCommune}</span>
                   </div>
-                  {/* عرض تفاصيل المنتجات مع الصور */}
+                  {/* Items display */}
                   {order.items && order.items.length > 0 && (
                     <div className="mt-4 space-y-2 border-t border-slate-100 pt-3">
                       <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Articles commandés</p>
                       {order.items.map((item, idx) => {
-                          // Check for legacy string items vs new object items
                           const isObject = typeof item === 'object' && item !== null;
                           const itemName = isObject ? item.name : item;
                           const itemDetails = isObject ? 
                               [item.selectedSize && `Taille: ${item.selectedSize}`, item.selectedColor && `Couleur: ${item.selectedColor}`].filter(Boolean).join(' • ') 
                               : '';
-                          // We use the first image if available, else a fallback or nothing
                           const itemImage = isObject ? item.image : null;
 
                           return (
@@ -778,32 +905,29 @@ const AdminPanel = ({ onBackToStore }) => {
 };
 
 // --- Composant Détails du Produit ---
-const ProductDetails = ({ onAddToCart }) => {
-  const { id } = useParams(); // أخذ الآيدي من الرابط
-  const navigate = useNavigate();
+const ProductDetails = ({ onAddToCart, onBack, productId }) => {
   const [product, setProduct] = useState(null);
   const [selectedSize, setSelectedSize] = useState(null);
   const [selectedColor, setSelectedColor] = useState(null);
   const [activeImage, setActiveImage] = useState(null);
 
-  // جلب بيانات المنتج من فايربيس باستخدام الـ ID
   useEffect(() => {
     const fetchProduct = async () => {
       try {
-        const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'products', id);
+        const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'products', productId);
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
           const data = docSnap.data();
           setProduct({ id: docSnap.id, ...data });
           setActiveImage(data.images && data.images.length > 0 ? data.images[0] : data.image);
         } else {
-            // بحث في المنتجات الافتراضية إذا لم يوجد في قاعدة البيانات (لأغراض العرض)
+            // Default check
             const defaultProducts = [
                 { id: 'def1', name: 'Pantalon Chino Signature', price: 6500, image: 'https://images.unsplash.com/photo-1541099649105-f69ad21f3246?q=80&w=600', category: 'Pantalon' },
                 { id: 'def2', name: 'Chemise Slim Oxford', price: 4800, image: 'https://images.unsplash.com/photo-1596755094514-f87e34085b2c?q=80&w=600', category: 'Chemise' },
                 { id: 'def3', name: 'Manteau Laine & Cachemire', price: 24000, image: 'https://images.unsplash.com/photo-1539533113208-f6df8cc8b543?q=80&w=600', category: 'Manteau' }
             ];
-            const defProd = defaultProducts.find(p => p.id === id);
+            const defProd = defaultProducts.find(p => p.id === productId);
             if(defProd) {
                 setProduct(defProd);
                 setActiveImage(defProd.image);
@@ -814,7 +938,7 @@ const ProductDetails = ({ onAddToCart }) => {
       }
     };
     fetchProduct();
-  }, [id]);
+  }, [productId]);
 
   const handleAddToCart = () => {
     if (product.sizes && product.sizes.length > 0 && !selectedSize) {
@@ -836,12 +960,12 @@ const ProductDetails = ({ onAddToCart }) => {
   return (
     <div className="min-h-screen bg-white animate-fade-in pt-24 pb-12">
       <div className="max-w-7xl mx-auto px-6">
-        <button onClick={() => navigate('/')} className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-gray-500 hover:text-black mb-8 transition-colors">
+        <button onClick={onBack} className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-gray-500 hover:text-black mb-8 transition-colors">
           <ArrowLeft size={18} /> Retour à la boutique
         </button>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20">
-          {/* الصور */}
+          {/* Images */}
           <div className="space-y-6">
             <div className="aspect-[3/4] bg-gray-50 rounded-lg overflow-hidden">
               <img src={activeImage} alt={product.name} className="w-full h-full object-cover" />
@@ -857,14 +981,14 @@ const ProductDetails = ({ onAddToCart }) => {
             )}
           </div>
 
-          {/* التفاصيل */}
+          {/* Details */}
           <div className="flex flex-col">
             <div className="mb-2"><span className="text-[#c4a47c] text-xs font-bold tracking-[0.3em] uppercase">{product.category}</span></div>
             <h1 className="logo-font text-4xl md:text-5xl font-medium mb-4">{product.name}</h1>
             <p className="text-2xl font-light mb-8">{product.price.toLocaleString()} DZD</p>
             <div className="prose prose-sm text-gray-500 mb-10 leading-relaxed"><p>{product.description || "Description non disponible."}</p></div>
 
-            {/* المقاسات */}
+            {/* Sizes */}
             {product.sizes && product.sizes.length > 0 && (
               <div className="mb-8">
                 <span className="text-sm font-bold uppercase tracking-widest block mb-4">Taille</span>
@@ -876,7 +1000,7 @@ const ProductDetails = ({ onAddToCart }) => {
               </div>
             )}
 
-            {/* الألوان */}
+            {/* Colors */}
             {product.colors && product.colors.length > 0 && (
                 <div className="mb-10">
                   <span className="text-sm font-bold uppercase tracking-widest block mb-4">Couleur</span>
@@ -901,16 +1025,15 @@ const ProductDetails = ({ onAddToCart }) => {
 };
 
 // --- Composant Store Front ---
-const StoreFront = ({ onAdminClick, cart, addToCart }) => {
-  const navigate = useNavigate();
+const StoreFront = ({ onAdminClick, cart, addToCart, onProductClick }) => {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [showCheckout, setShowCheckout] = useState(false);
   const [formData, setFormData] = useState({ name: '', phone: '', wilaya: '', commune: '' });
   const [orderComplete, setOrderComplete] = useState(false);
+  const [deliveryType, setDeliveryType] = useState('home'); // 'home' | 'desk'
+  const [deliveryFees, setDeliveryFees] = useState({});
+  const [selectedCategory, setSelectedCategory] = useState('Tout'); // New State for Filtering
   
-  // Navigation State
-  const [selectedProduct, setSelectedProduct] = useState(null);
-
   // Real-time products from Firebase
   const [products, setProducts] = useState([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
@@ -954,24 +1077,58 @@ const StoreFront = ({ onAdminClick, cart, addToCart }) => {
        console.error("Error fetching products:", error);
        setLoadingProducts(false);
     });
-    return () => unsubscribe();
+
+    const feesRef = collection(db, 'artifacts', appId, 'public', 'data', 'delivery_fees');
+    const unsubscribeFees = onSnapshot(feesRef, (snapshot) => {
+      const feesMap = {};
+      snapshot.docs.forEach(doc => {
+        feesMap[doc.id] = doc.data();
+      });
+      setDeliveryFees(feesMap);
+    });
+
+    return () => {
+      unsubscribe();
+      unsubscribeFees();
+    };
   }, [user]);
 
-  const displayProducts = products.length > 0 ? products : defaultProducts;
+  const allProducts = products.length > 0 ? products : defaultProducts;
+  
+  // Define standard categories to always show
+  const PREDEFINED_CATEGORIES = ['Costumes', 'Chaussures', 'Accessoires', 'Chemises', 'Manteaux', 'Pantalon'];
+
+  // Extract unique categories from products and merge with predefined
+  const dynamicCategories = allProducts.map(p => p.category).filter(Boolean);
+  const categories = ['Tout', ...new Set([...PREDEFINED_CATEGORIES, ...dynamicCategories])];
+
+  // Filter products based on selection
+  const displayProducts = selectedCategory === 'Tout' 
+    ? allProducts 
+    : allProducts.filter(p => p.category === selectedCategory);
 
   const handleQuickAdd = (product) => {
-    // نستخدم دالة الإضافة التي جلبناها من App
     addToCart(product); 
     setIsCartOpen(true);
   };
 
   const removeFromCart = (index) => {
-    const newCart = [...cart];
-    newCart.splice(index, 1);
-    setCart(newCart);
+    // Note: This logic assumes parent will handle, just placeholder alert
+    alert("Veuillez gérer le panier depuis la page principale."); 
   };
-
-  const total = cart.reduce((sum, item) => sum + item.price, 0);
+  
+  // Re-calculating total locally for display
+  const subtotal = cart.reduce((sum, item) => sum + item.price, 0);
+  
+  // FIX: Safe fee retrieval
+  const currentWilayaFees = (formData.wilaya && deliveryFees[formData.wilaya]) 
+                            ? deliveryFees[formData.wilaya] 
+                            : {}; 
+  const homePrice = currentWilayaFees.home !== undefined ? currentWilayaFees.home : 800;
+  const deskPrice = currentWilayaFees.desk !== undefined ? currentWilayaFees.desk : 400;
+                            
+  const deliveryPrice = deliveryType === 'home' ? homePrice : deskPrice;
+  const total = subtotal + deliveryPrice;
 
   const handleOrder = async () => {
     if (!formData.name || !formData.phone || !formData.wilaya || !formData.commune) {
@@ -987,12 +1144,10 @@ const StoreFront = ({ onAdminClick, cart, addToCart }) => {
     try {
       const ordersRef = collection(db, 'artifacts', appId, 'public', 'data', 'orders');
       
-      // Construire des objets d'articles riches (avec image)
       const orderItems = cart.map(c => ({
         name: c.name,
         selectedSize: c.selectedSize || null,
         selectedColor: c.selectedColor || null,
-        // Fallback logic for image similar to display logic
         image: (c.images && c.images.length > 0) ? c.images[0] : (c.image || c.img),
         price: c.price
       }));
@@ -1002,33 +1157,30 @@ const StoreFront = ({ onAdminClick, cart, addToCart }) => {
         customerPhone: formData.phone,
         customerWilaya: formData.wilaya,
         customerCommune: formData.commune,
+        deliveryType: deliveryType, // 'home' or 'desk'
+        deliveryPrice: deliveryPrice,
         itemsCount: cart.length,
+        subtotal: subtotal,
         total: total,
         status: 'pending',
-        items: orderItems, // Sauvegarder les données structurées
+        items: orderItems,
         createdAt: new Date().toISOString()
       });
       setOrderComplete(true);
-      setCart([]);
     } catch (e) {
       console.error(e);
       alert("Erreur lors de l'envoi de la commande. Vérifiez votre connexion.");
     }
   };
 
-  // Gestion du retour en haut de page lors du changement de vue
-  useEffect(() => {
-    window.scrollTo(0, 0);
-  }, [selectedProduct]);
-
   return (
     <div className="bg-[#fcfcfc] text-[#1a1a1a] min-h-screen font-sans selection:bg-[#c4a47c] selection:text-white">
       <nav className="fixed top-0 w-full z-50 bg-white/80 backdrop-blur-md border-b border-gray-100 transition-all duration-300">
         <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
-          <div className="logo-font text-2xl font-bold tracking-tighter uppercase border-b-2 border-black pb-1 cursor-pointer" onClick={() => setSelectedProduct(null)}>Élégance</div>
+          <div className="logo-font text-2xl font-bold tracking-tighter uppercase border-b-2 border-black pb-1 cursor-pointer" onClick={() => {}}>Élégance</div>
           
           <div className="hidden md:flex space-x-10 text-[11px] font-bold tracking-[0.2em] uppercase">
-            <a href="#vetements" onClick={() => setSelectedProduct(null)} className="hover:text-[#c4a47c] transition duration-300 relative after:content-[''] after:absolute after:w-0 after:h-[1px] after:bg-[#c4a47c] after:left-0 after:-bottom-1 after:transition-all hover:after:w-full">Prêt-à-porter</a>
+            <a href="#vetements" className="hover:text-[#c4a47c] transition duration-300 relative after:content-[''] after:absolute after:w-0 after:h-[1px] after:bg-[#c4a47c] after:left-0 after:-bottom-1 after:transition-all hover:after:w-full">Prêt-à-porter</a>
             <a href="#footer" className="hover:text-[#c4a47c] transition duration-300">Contact</a>
           </div>
 
@@ -1042,13 +1194,6 @@ const StoreFront = ({ onAdminClick, cart, addToCart }) => {
         </div>
       </nav>
 
-      {selectedProduct ? (
-        <ProductDetails 
-          product={selectedProduct} 
-          onBack={() => setSelectedProduct(null)} 
-          onAddToCart={addToCart} 
-        />
-      ) : (
         <>
           <section className="h-screen flex items-center px-6 md:px-20 bg-cover bg-center relative bg-fixed" style={{backgroundImage: "linear-gradient(to right, rgba(0,0,0,0.5), rgba(0,0,0,0.1)), url('https://images.unsplash.com/photo-1507679799987-c73779587ccf?q=80&w=2071')"}}>
             <div className="max-w-3xl text-white pt-20">
@@ -1059,48 +1204,71 @@ const StoreFront = ({ onAdminClick, cart, addToCart }) => {
           </section>
 
           <main className="py-24 px-6 max-w-7xl mx-auto" id="vetements">
-            <div className="mb-16 rounded-xl overflow-hidden shadow-sm">
+            <div className="mb-12 rounded-xl overflow-hidden shadow-sm">
               <img src="https://images.unsplash.com/photo-1441984904996-e0b6ba687e04?q=80&w=2070" alt="New Collection" className="w-full h-48 md:h-64 object-cover" />
             </div>
 
-            <div className="flex flex-col md:flex-row justify-between items-end mb-16">
+            <div className="flex flex-col md:flex-row justify-between items-end mb-8">
               <div>
                 <span className="text-[#c4a47c] text-xs font-bold tracking-[0.3em] uppercase">Vêtements</span>
                 <h2 className="logo-font text-5xl mt-2 italic">Prêt-à-porter de Luxe</h2>
               </div>
               <div className="text-right hidden md:block">
-                 <p className="text-xs text-gray-400 uppercase tracking-widest">Collection Automne / Hiver</p>
+                  <p className="text-xs text-gray-400 uppercase tracking-widest">Collection Automne / Hiver</p>
+              </div>
+            </div>
+
+            {/* Category Filter */}
+            <div className="mb-12 overflow-x-auto pb-4 no-scrollbar">
+              <div className="flex gap-4">
+                {categories.map(cat => (
+                  <button
+                    key={cat}
+                    onClick={() => setSelectedCategory(cat)}
+                    className={`px-6 py-2 rounded-full text-xs font-bold uppercase tracking-widest whitespace-nowrap transition-all ${
+                      selectedCategory === cat 
+                        ? 'bg-black text-white shadow-lg transform scale-105' 
+                        : 'bg-white text-gray-500 border border-gray-200 hover:border-black hover:text-black'
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
               </div>
             </div>
 
             {loadingProducts ? (
                <div className="flex justify-center py-20"><div className="w-8 h-8 border-2 border-black border-t-transparent rounded-full animate-spin"></div></div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-16">
-                {displayProducts.map((product) => {
-                   // Use array if available, fallback to single string, fallback to img (default products)
-                   const displayImage = (product.images && product.images.length > 0) ? product.images[0] : (product.image || product.img);
-                   return (
-                  <div key={product.id} onClick={() => navigate(`/product/${product.id}`)} className="group cursor-pointer">
-                    <div className="overflow-hidden bg-[#f0f0f0] aspect-[3/4] mb-6 relative">
-                      <img src={displayImage} className="w-full h-full object-cover transition duration-1000 ease-in-out group-hover:scale-110" alt={product.name} />
-                      <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-                      <button onClick={(e) => { e.stopPropagation(); handleQuickAdd(product); }} className="absolute bottom-0 left-0 w-full bg-white text-black py-4 translate-y-full group-hover:translate-y-0 transition-transform duration-500 text-[10px] font-bold uppercase tracking-widest hover:bg-black hover:text-white border-t border-black">Ajouter au Panier</button>
-                    </div>
-                    <div className="flex justify-between items-start">
-                       <div>
-                          <h4 className="text-lg font-light group-hover:underline decoration-1 underline-offset-4">{product.name}</h4>
-                          <p className="text-gray-400 text-xs mt-1 uppercase tracking-widest">{product.category || 'Collection'}</p>
-                       </div>
-                       <p className="text-[#c4a47c] font-medium mt-1 uppercase text-sm tracking-tighter">{product.price.toLocaleString()} DZD</p>
-                    </div>
+              <>
+                {displayProducts.length === 0 ? (
+                  <div className="text-center py-20 text-gray-400 italic">Aucun produit trouvé dans cette catégorie.</div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-16 animate-fade-in">
+                    {displayProducts.map((product) => {
+                      const displayImage = (product.images && product.images.length > 0) ? product.images[0] : (product.image || product.img);
+                      return (
+                      <div key={product.id} onClick={() => onProductClick(product.id)} className="group cursor-pointer">
+                        <div className="overflow-hidden bg-[#f0f0f0] aspect-[3/4] mb-6 relative">
+                          <img src={displayImage} className="w-full h-full object-cover transition duration-1000 ease-in-out group-hover:scale-110" alt={product.name} />
+                          <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                          <button onClick={(e) => { e.stopPropagation(); handleQuickAdd(product); }} className="absolute bottom-0 left-0 w-full bg-white text-black py-4 translate-y-full group-hover:translate-y-0 transition-transform duration-500 text-[10px] font-bold uppercase tracking-widest hover:bg-black hover:text-white border-t border-black">Ajouter au Panier</button>
+                        </div>
+                        <div className="flex justify-between items-start">
+                          <div>
+                              <h4 className="text-lg font-light group-hover:underline decoration-1 underline-offset-4">{product.name}</h4>
+                              <p className="text-gray-400 text-xs mt-1 uppercase tracking-widest">{product.category || 'Collection'}</p>
+                          </div>
+                          <p className="text-[#c4a47c] font-medium mt-1 uppercase text-sm tracking-tighter">{product.price.toLocaleString()} DZD</p>
+                        </div>
+                      </div>
+                    )})}
                   </div>
-                )})}
-              </div>
+                )}
+              </>
             )}
           </main>
         </>
-      )}
 
       <footer id="footer" className="bg-[#0a0a0a] text-white py-24 px-6 border-t border-gray-900">
         <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-16">
@@ -1145,7 +1313,6 @@ const StoreFront = ({ onAdminClick, cart, addToCart }) => {
                </div>
             ) : (
                cart.map((item, i) => {
-                  // Handle cart item image
                   const itemImg = (item.images && item.images.length > 0) ? item.images[0] : (item.image || item.img);
                   return (
                   <div key={i} className="flex justify-between items-center slide-in" style={{animationDelay: `${i * 0.1}s`}}>
@@ -1160,25 +1327,75 @@ const StoreFront = ({ onAdminClick, cart, addToCart }) => {
                           {item.selectedColor && <p className="text-[10px] text-gray-500 mt-1">Couleur: {item.selectedColor}</p>}
                       </div>
                     </div>
-                    <button onClick={() => removeFromCart(i)} className="text-gray-300 hover:text-red-500 transition"><Trash2 size={16} /></button>
                   </div>
               )}))}
           </div>
 
           <div className="p-8 bg-gray-50 space-y-6 border-t border-gray-100">
-            <div className="flex justify-between items-end border-b border-gray-200 pb-4">
-              <span className="text-xs uppercase font-bold text-gray-400">Total</span>
-              <span className="text-3xl font-bold tracking-tighter logo-font">{total.toLocaleString()} <span className="text-sm font-sans font-normal text-gray-500">DZD</span></span>
-            </div>
+            {/* Total Section Display */}
+             {cart.length > 0 && (
+              <div className="space-y-2 border-b border-gray-200 pb-4">
+                <div className="flex justify-between text-xs text-gray-400">
+                  <span>Sous-total</span>
+                  <span>{subtotal.toLocaleString()} DZD</span>
+                </div>
+                <div className="flex justify-between text-xs text-gray-400">
+                  <span>Livraison ({deliveryType === 'home' ? 'Domicile' : 'Bureau'})</span>
+                  <span>{deliveryPrice.toLocaleString()} DZD</span>
+                </div>
+                <div className="flex justify-between items-end pt-2">
+                  <span className="text-xs uppercase font-bold text-gray-400">Total</span>
+                  <span className="text-3xl font-bold tracking-tighter logo-font">{total.toLocaleString()} <span className="text-sm font-sans font-normal text-gray-500">DZD</span></span>
+                </div>
+              </div>
+             )}
 
             {showCheckout && !orderComplete && (
               <div className="space-y-3 pt-2 animate-[slideUp_0.4s_ease-out]">
                 <input placeholder="NOM COMPLET" className="w-full bg-white border border-gray-200 p-4 text-[11px] font-bold tracking-widest outline-none focus:border-[#c4a47c] transition" onChange={e => setFormData({...formData, name: e.target.value})} />
                 <input placeholder="TÉLÉPHONE" className="w-full bg-white border border-gray-200 p-4 text-[11px] font-bold tracking-widest outline-none focus:border-[#c4a47c] transition" onChange={e => setFormData({...formData, phone: e.target.value})} />
                 <div className="grid grid-cols-2 gap-3">
-                  <input placeholder="WILAYA" className="w-full bg-white border border-gray-200 p-4 text-[11px] font-bold tracking-widest outline-none focus:border-[#c4a47c] transition" onChange={e => setFormData({...formData, wilaya: e.target.value})} />
+                   {/* Wilaya Selector - Dynamic from WILAYAS constant */}
+                   <select 
+                     className="w-full bg-white border border-gray-200 p-4 text-[11px] font-bold tracking-widest outline-none focus:border-[#c4a47c] transition"
+                     value={formData.wilaya}
+                     onChange={e => setFormData({...formData, wilaya: e.target.value})}
+                   >
+                     <option value="">SÉLECTIONNER WILAYA</option>
+                     {WILAYAS.map(w => (
+                       <option key={w} value={w}>{w}</option>
+                     ))}
+                   </select>
+                   
                   <input placeholder="COMMUNE" className="w-full bg-white border border-gray-200 p-4 text-[11px] font-bold tracking-widest outline-none focus:border-[#c4a47c] transition" onChange={e => setFormData({...formData, commune: e.target.value})} />
                 </div>
+                
+                {/* Delivery Selector */}
+                <div className="grid grid-cols-2 gap-3 mt-2">
+                  <button 
+                    className={`p-3 border rounded-lg text-[10px] font-bold uppercase tracking-wide transition-all ${deliveryType === 'desk' ? 'border-[#c4a47c] bg-amber-50 text-[#c4a47c]' : 'border-gray-200 text-gray-400 hover:border-gray-300'}`}
+                    onClick={() => setDeliveryType('desk')}
+                  >
+                    Bureau (Stop Desk)<br/>
+                    {formData.wilaya ? (
+                       <span className="text-xs">+{deskPrice} DZD</span>
+                    ) : (
+                       <span className="text-xs text-gray-300">Sélectionnez Wilaya</span>
+                    )}
+                  </button>
+                  <button 
+                    className={`p-3 border rounded-lg text-[10px] font-bold uppercase tracking-wide transition-all ${deliveryType === 'home' ? 'border-[#c4a47c] bg-amber-50 text-[#c4a47c]' : 'border-gray-200 text-gray-400 hover:border-gray-300'}`}
+                    onClick={() => setDeliveryType('home')}
+                  >
+                    À Domicile<br/>
+                    {formData.wilaya ? (
+                       <span className="text-xs">+{homePrice} DZD</span>
+                    ) : (
+                       <span className="text-xs text-gray-300">Sélectionnez Wilaya</span>
+                    )}
+                  </button>
+                </div>
+
                 <button onClick={handleOrder} className="w-full bg-[#1a1a1a] text-white py-5 text-[10px] font-bold uppercase tracking-widest hover:bg-[#c4a47c] transition duration-300 mt-2">Confirmer l'Achat</button>
               </div>
             )}
@@ -1207,15 +1424,11 @@ const StoreFront = ({ onAdminClick, cart, addToCart }) => {
 
 // --- App Racine ---
 const App = () => {
-  // 1. نقلنا حالة السلة (Cart) لتكون هنا، حتى لا تُحذف عند تغيير الصفحة
+  const [currentView, setCurrentView] = useState('store'); // 'store', 'admin', 'product'
+  const [activeProductId, setActiveProductId] = useState(null);
   const [cart, setCart] = useState([]);
 
-  // دالة لإضافة منتج للسلة
-  const addToCart = (product) => {
-    setCart([...cart, product]);
-  };
-
-  // كود استدعاء Tailwind (كما كان سابقاً)
+  // Load Tailwind
   useEffect(() => {
     if (!document.getElementById('tailwind-script')) {
       const script = document.createElement('script');
@@ -1225,45 +1438,50 @@ const App = () => {
     }
   }, []);
 
+  const addToCart = (product) => {
+    setCart([...cart, product]);
+  };
+
+  const handleProductClick = (id) => {
+    setActiveProductId(id);
+    setCurrentView('product');
+    window.scrollTo(0,0);
+  };
+
+  const handleBackToStore = () => {
+    setCurrentView('store');
+    setActiveProductId(null);
+  };
+
+  const handleAdminClick = () => {
+    setCurrentView('admin');
+  };
+
   return (
-    // 2. إعداد نظام التوجيه (Router)
-    <BrowserRouter>
-      <Routes>
-        
-        {/* الرابط الرئيسي: نمرر له السلة ودالة الإضافة */}
-        <Route 
-          path="/" 
-          element={
-            <StoreFront 
-              onAdminClick={() => window.location.href = '/admin'} 
-              cart={cart}
-              addToCart={addToCart}
-            />
-          } 
+    <>
+      {currentView === 'store' && (
+        <StoreFront 
+          onAdminClick={handleAdminClick} 
+          cart={cart}
+          addToCart={addToCart}
+          onProductClick={handleProductClick}
         />
+      )}
 
-        {/* رابط صفحة المنتج الديناميكي */}
-        <Route 
-          path="/product/:id" 
-          element={
-            <ProductDetails 
-              onAddToCart={addToCart} 
-            />
-          } 
+      {currentView === 'product' && activeProductId && (
+        <ProductDetails 
+          productId={activeProductId}
+          onAddToCart={addToCart} 
+          onBack={handleBackToStore}
         />
+      )}
 
-        {/* رابط لوحة التحكم */}
-        <Route 
-          path="/admin" 
-          element={
-            <AdminPanel 
-              onBackToStore={() => window.location.href = '/'} 
-            />
-          } 
+      {currentView === 'admin' && (
+        <AdminPanel 
+          onBackToStore={handleBackToStore} 
         />
-
-      </Routes>
-    </BrowserRouter>
+      )}
+    </>
   );
 };
 
