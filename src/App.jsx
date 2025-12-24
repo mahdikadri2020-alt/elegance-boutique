@@ -443,7 +443,7 @@ const AdminPanel = ({ onBackToStore }) => {
     <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row font-sans text-left" dir="ltr">
       <aside className="w-full md:w-64 bg-slate-900 text-white p-6 flex flex-col gap-8 shadow-xl shrink-0">
         <div className="text-center">
-          <h1 className="text-2xl font-serif tracking-widest text-amber-500 logo-font">ÉLÉGANCE</h1>
+          <h1 className="text-2xl font-serif tracking-widest text-amber-500 logo-font">Élégance (V2)</h1>
           <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-widest">Haute Couture</p>
         </div>
         <nav className="flex flex-col gap-2">
