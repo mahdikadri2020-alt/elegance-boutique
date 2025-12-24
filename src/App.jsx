@@ -904,128 +904,8 @@ const AdminPanel = ({ onBackToStore }) => {
   );
 };
 
-// --- Composant Détails du Produit ---
-const ProductDetails = ({ onAddToCart, onBack, productId }) => {
-  const [product, setProduct] = useState(null);
-  const [selectedSize, setSelectedSize] = useState(null);
-  const [selectedColor, setSelectedColor] = useState(null);
-  const [activeImage, setActiveImage] = useState(null);
-
-  useEffect(() => {
-    const fetchProduct = async () => {
-      try {
-        const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'products', productId);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          setProduct({ id: docSnap.id, ...data });
-          setActiveImage(data.images && data.images.length > 0 ? data.images[0] : data.image);
-        } else {
-            // Default check
-            const defaultProducts = [
-                { id: 'def1', name: 'Pantalon Chino Signature', price: 6500, image: 'https://images.unsplash.com/photo-1541099649105-f69ad21f3246?q=80&w=600', category: 'Pantalon' },
-                { id: 'def2', name: 'Chemise Slim Oxford', price: 4800, image: 'https://images.unsplash.com/photo-1596755094514-f87e34085b2c?q=80&w=600', category: 'Chemise' },
-                { id: 'def3', name: 'Manteau Laine & Cachemire', price: 24000, image: 'https://images.unsplash.com/photo-1539533113208-f6df8cc8b543?q=80&w=600', category: 'Manteau' }
-            ];
-            const defProd = defaultProducts.find(p => p.id === productId);
-            if(defProd) {
-                setProduct(defProd);
-                setActiveImage(defProd.image);
-            }
-        }
-      } catch (error) {
-        console.error("Error", error);
-      }
-    };
-    fetchProduct();
-  }, [productId]);
-
-  const handleAddToCart = () => {
-    if (product.sizes && product.sizes.length > 0 && !selectedSize) {
-      alert("Veuillez sélectionner une taille.");
-      return;
-    }
-    if (product.colors && product.colors.length > 0 && !selectedColor) {
-      alert("Veuillez sélectionner une couleur.");
-      return;
-    }
-    onAddToCart({ ...product, selectedSize, selectedColor });
-    alert("Produit ajouté au panier !");
-  };
-
-  if (!product) return <div className="p-20 text-center"><Loader className="animate-spin inline" /> Chargement...</div>;
-
-  const images = (product.images && product.images.length > 0) ? product.images : [product.image];
-
-  return (
-    <div className="min-h-screen bg-white animate-fade-in pt-24 pb-12">
-      <div className="max-w-7xl mx-auto px-6">
-        <button onClick={onBack} className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-gray-500 hover:text-black mb-8 transition-colors">
-          <ArrowLeft size={18} /> Retour à la boutique
-        </button>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20">
-          {/* Images */}
-          <div className="space-y-6">
-            <div className="aspect-[3/4] bg-gray-50 rounded-lg overflow-hidden">
-              <img src={activeImage} alt={product.name} className="w-full h-full object-cover" />
-            </div>
-            {images.length > 1 && (
-              <div className="flex gap-4 overflow-x-auto pb-2 no-scrollbar">
-                {images.map((img, idx) => (
-                  <button key={idx} onClick={() => setActiveImage(img)} className={`w-20 h-24 flex-shrink-0 rounded-md overflow-hidden border-2 transition-all ${activeImage === img ? 'border-black' : 'border-transparent opacity-70 hover:opacity-100'}`}>
-                    <img src={img} alt={`View ${idx}`} className="w-full h-full object-cover" />
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Details */}
-          <div className="flex flex-col">
-            <div className="mb-2"><span className="text-[#c4a47c] text-xs font-bold tracking-[0.3em] uppercase">{product.category}</span></div>
-            <h1 className="logo-font text-4xl md:text-5xl font-medium mb-4">{product.name}</h1>
-            <p className="text-2xl font-light mb-8">{product.price.toLocaleString()} DZD</p>
-            <div className="prose prose-sm text-gray-500 mb-10 leading-relaxed"><p>{product.description || "Description non disponible."}</p></div>
-
-            {/* Sizes */}
-            {product.sizes && product.sizes.length > 0 && (
-              <div className="mb-8">
-                <span className="text-sm font-bold uppercase tracking-widest block mb-4">Taille</span>
-                <div className="flex flex-wrap gap-3">
-                  {product.sizes.map(size => (
-                    <button key={size} onClick={() => setSelectedSize(size)} className={`w-12 h-12 flex items-center justify-center border transition-all ${selectedSize === size ? 'bg-black text-white border-black' : 'bg-white text-gray-600 border-gray-200 hover:border-black'}`}>{size}</button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Colors */}
-            {product.colors && product.colors.length > 0 && (
-                <div className="mb-10">
-                  <span className="text-sm font-bold uppercase tracking-widest block mb-4">Couleur</span>
-                  <div className="flex flex-wrap gap-3">
-                    {product.colors.map(color => (
-                      <button key={color} onClick={() => setSelectedColor(color)} className={`px-4 py-2 border transition-all text-sm font-medium ${selectedColor === color ? 'bg-black text-white border-black' : 'bg-white text-gray-600 border-gray-200 hover:border-black'}`}>{color}</button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-            <div className="mt-auto space-y-4">
-              <button onClick={handleAddToCart} className="w-full bg-[#1a1a1a] text-white py-5 text-sm font-bold uppercase tracking-widest hover:bg-[#c4a47c] transition duration-300 flex items-center justify-center gap-3">
-                <ShoppingBag size={18} /> Ajouter au Panier
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
 // --- Composant Store Front ---
-const StoreFront = ({ onAdminClick, cart, addToCart, onProductClick }) => {
+const StoreFront = ({ onAdminClick, cart, addToCart, removeFromCart, onProductClick }) => {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [showCheckout, setShowCheckout] = useState(false);
   const [formData, setFormData] = useState({ name: '', phone: '', wilaya: '', commune: '' });
@@ -1110,11 +990,6 @@ const StoreFront = ({ onAdminClick, cart, addToCart, onProductClick }) => {
   const handleQuickAdd = (product) => {
     addToCart(product); 
     setIsCartOpen(true);
-  };
-
-  const removeFromCart = (index) => {
-    // Note: This logic assumes parent will handle, just placeholder alert
-    alert("Veuillez gérer le panier depuis la page principale."); 
   };
   
   // Re-calculating total locally for display
@@ -1327,6 +1202,7 @@ const StoreFront = ({ onAdminClick, cart, addToCart, onProductClick }) => {
                           {item.selectedColor && <p className="text-[10px] text-gray-500 mt-1">Couleur: {item.selectedColor}</p>}
                       </div>
                     </div>
+                    <button onClick={() => removeFromCart(i)} className="text-gray-300 hover:text-red-500 transition"><Trash2 size={16} /></button>
                   </div>
               )}))}
           </div>
@@ -1442,6 +1318,10 @@ const App = () => {
     setCart([...cart, product]);
   };
 
+  const removeFromCart = (indexToRemove) => {
+    setCart(cart.filter((_, index) => index !== indexToRemove));
+  };
+
   const handleProductClick = (id) => {
     setActiveProductId(id);
     setCurrentView('product');
@@ -1464,6 +1344,7 @@ const App = () => {
           onAdminClick={handleAdminClick} 
           cart={cart}
           addToCart={addToCart}
+          removeFromCart={removeFromCart}
           onProductClick={handleProductClick}
         />
       )}
