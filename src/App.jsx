@@ -1,4 +1,7 @@
+/* global __firebase_config, __app_id, __initial_auth_token */
 import React, { useState, useEffect } from 'react';
+// 👇 1. استيراد مكتبة الروابط (مهم جداً)
+import { BrowserRouter, Routes, Route, useNavigate, useParams } from 'react-router-dom';
 import { 
   LayoutDashboard, Package, PlusCircle, ShoppingCart, Trash2, 
   TrendingUp, Users, Image as ImageIcon, CheckCircle, Lock, 
@@ -8,14 +11,12 @@ import {
 import { initializeApp } from 'firebase/app';
 import { 
   getFirestore, collection, addDoc, onSnapshot, deleteDoc, 
-  doc, updateDoc, getDoc, setDoc
+  doc, updateDoc, getDoc, setDoc // 👈 2. تأكدنا من وجود getDoc
 } from 'firebase/firestore';
 import { 
   getAuth, signInAnonymously, signInWithCustomToken, 
   onAuthStateChanged 
 } from 'firebase/auth';
-
-/* global __firebase_config, __app_id, __initial_auth_token */
 
 // --- Configuration Firebase ---
 const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
@@ -166,7 +167,7 @@ const AdminPanel = ({ onBackToStore }) => {
       setDeliveryFees(feesMap);
       // Initialize local state for editing
       setLocalFees(prev => ({...feesMap, ...prev}));
-    });
+    }, (error) => console.error("Fees fetch error:", error));
 
     return () => {
       unsubscribeProducts();
@@ -191,12 +192,9 @@ const AdminPanel = ({ onBackToStore }) => {
     }, 1000);
   };
 
-  // FIX: Robust state update to prevent undefined values
   const handleFeeChange = (wilaya, type, value) => {
     setLocalFees(prev => {
-      // Ensure we have a base object if it doesn't exist yet
       const currentData = prev[wilaya] || { home: 800, desk: 400 };
-      
       return {
         ...prev,
         [wilaya]: {
@@ -484,6 +482,7 @@ const AdminPanel = ({ onBackToStore }) => {
           </div>
         )}
 
+        {/* ... (Table des produits, etc. - Mêmes composants qu'avant) ... */}
         {activeTab === 'products' && (
           <div className="bg-white rounded-2xl shadow-sm overflow-hidden animate-fade-in">
             <div className="overflow-x-auto">
@@ -503,28 +502,9 @@ const AdminPanel = ({ onBackToStore }) => {
                         <div className="flex items-center gap-3">
                           <div className="relative">
                             <img src={thumbnail} className="w-12 h-12 rounded-lg object-cover shadow-sm bg-slate-100" alt={p.name} />
-                            {p.images && p.images.length > 1 && (
-                              <div className="absolute -top-1 -right-1 bg-slate-800 text-white text-[9px] w-4 h-4 rounded-full flex items-center justify-center font-bold border border-white">
-                                {p.images.length}
-                              </div>
-                            )}
                           </div>
                           <div>
                             <p className="font-bold text-slate-800">{p.name}</p>
-                            {p.sizes && p.sizes.length > 0 && (
-                              <div className="flex gap-1 mt-1 flex-wrap">
-                                {p.sizes.map(s => (
-                                  <span key={s} className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded border border-slate-200">{s}</span>
-                                ))}
-                              </div>
-                            )}
-                             {p.colors && p.colors.length > 0 && (
-                              <div className="flex gap-1 mt-1 flex-wrap">
-                                {p.colors.map(c => (
-                                  <span key={c} className="text-[9px] bg-white text-slate-500 px-1.5 py-0.5 rounded border border-slate-200">{c}</span>
-                                ))}
-                              </div>
-                            )}
                           </div>
                         </div>
                       </td>
@@ -686,7 +666,6 @@ const AdminPanel = ({ onBackToStore }) => {
                     </button>
                   ))}
                 </div>
-                {newProduct.sizes.length === 0 && <p className="text-xs text-amber-600 mt-2 font-medium">Aucune taille sélectionnée (optionnel)</p>}
               </div>
 
               {/* Color Select */}
@@ -777,7 +756,6 @@ const AdminPanel = ({ onBackToStore }) => {
                   </thead>
                   <tbody>
                     {WILAYAS.map((wilaya, index) => {
-                      // FIX: Safe access to properties to avoid uncontrolled input warning
                       const fees = localFees[wilaya] || { home: 800, desk: 400 };
                       const deskVal = fees.desk !== undefined ? fees.desk : 400;
                       const homeVal = fees.home !== undefined ? fees.home : 800;
@@ -841,10 +819,10 @@ const AdminPanel = ({ onBackToStore }) => {
                         <p className="text-sm text-slate-500 font-medium">{order.customerPhone}</p>
                       </div>
                       <div className="text-right">
-                         <p className="text-lg font-bold text-slate-800">{order.total.toLocaleString()} DZD</p>
-                         <div className={`text-xs font-bold px-2 py-1 rounded inline-flex items-center gap-1 mt-1 ${order.deliveryType === 'home' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'}`}>
-                            <Truck size={12} /> {order.deliveryType === 'home' ? 'Domicile' : 'Bureau (Stop Desk)'}
-                         </div>
+                          <p className="text-lg font-bold text-slate-800">{order.total.toLocaleString()} DZD</p>
+                          <div className={`text-xs font-bold px-2 py-1 rounded inline-flex items-center gap-1 mt-1 ${order.deliveryType === 'home' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'}`}>
+                             <Truck size={12} /> {order.deliveryType === 'home' ? 'Domicile' : 'Bureau (Stop Desk)'}
+                          </div>
                       </div>
                   </div>
                   
@@ -904,17 +882,190 @@ const AdminPanel = ({ onBackToStore }) => {
   );
 };
 
-// --- Composant Store Front ---
-const StoreFront = ({ onAdminClick, cart, addToCart, removeFromCart, onProductClick }) => {
+// --- 3. Composant ProductDetails (تم إضافته ليعمل مع الروابط) ---
+const ProductDetails = ({ onAddToCart }) => {
+  const { id } = useParams(); 
+  const navigate = useNavigate();
+  const [product, setProduct] = useState(null);
+  const [selectedSize, setSelectedSize] = useState(null);
+  const [selectedColor, setSelectedColor] = useState(null);
+  const [activeImage, setActiveImage] = useState(null);
+
+  useEffect(() => {
+    const fetchProduct = async () => {
+      try {
+        const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'products', id);
+        const docSnap = await getDoc(docRef);
+
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setProduct({ id: docSnap.id, ...data });
+          setActiveImage(data.images && data.images.length > 0 ? data.images[0] : (data.image || data.img));
+        } else {
+            // بيانات افتراضية إذا لم يوجد المنتج
+            const defaultProducts = [
+                { id: 'def1', name: 'Pantalon Chino Signature', price: 6500, image: 'https://images.unsplash.com/photo-1541099649105-f69ad21f3246?q=80&w=600', category: 'Pantalon' },
+                { id: 'def2', name: 'Chemise Slim Oxford', price: 4800, image: 'https://images.unsplash.com/photo-1596755094514-f87e34085b2c?q=80&w=600', category: 'Chemise' },
+                { id: 'def3', name: 'Manteau Laine & Cachemire', price: 24000, image: 'https://images.unsplash.com/photo-1539533113208-f6df8cc8b543?q=80&w=600', category: 'Manteau' }
+            ];
+            const defProd = defaultProducts.find(p => p.id === id);
+            if(defProd) {
+                setProduct(defProd);
+                setActiveImage(defProd.image);
+            } else {
+                navigate('/');
+            }
+        }
+      } catch (error) {
+        console.error("Error fetching product:", error);
+      }
+    };
+    fetchProduct();
+  }, [id, navigate]);
+
+  const handleAddToCart = () => {
+    if (!product) return;
+    
+    if (product.sizes && product.sizes.length > 0 && !selectedSize) {
+      alert("Veuillez sélectionner une taille.");
+      return;
+    }
+    if (product.colors && product.colors.length > 0 && !selectedColor) {
+      alert("Veuillez sélectionner une couleur.");
+      return;
+    }
+    
+    onAddToCart({ 
+        ...product, 
+        selectedSize, 
+        selectedColor,
+        image: activeImage 
+    });
+    alert("Produit ajouté au panier !");
+  };
+
+  if (!product) {
+      return (
+        <div className="min-h-screen flex items-center justify-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-black"></div>
+        </div>
+      );
+  }
+
+  const images = (product.images && product.images.length > 0) ? product.images : [(product.image || product.img)];
+
+  return (
+    <div className="min-h-screen bg-white animate-fade-in pt-24 pb-12">
+      <div className="max-w-7xl mx-auto px-6">
+        <button 
+          onClick={() => navigate('/')}
+          className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-gray-500 hover:text-black mb-8 transition-colors"
+        >
+          <ArrowLeft size={18} /> Retour à la boutique
+        </button>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20">
+          <div className="space-y-6">
+            <div className="aspect-[3/4] bg-gray-50 rounded-lg overflow-hidden">
+              <img src={activeImage} alt={product.name} className="w-full h-full object-cover" />
+            </div>
+            
+            {images.length > 1 && (
+              <div className="flex gap-4 overflow-x-auto pb-2 no-scrollbar">
+                {images.map((img, idx) => (
+                  <button 
+                    key={idx} 
+                    onClick={() => setActiveImage(img)}
+                    className={`w-20 h-24 flex-shrink-0 rounded-md overflow-hidden border-2 transition-all ${activeImage === img ? 'border-black' : 'border-transparent opacity-70 hover:opacity-100'}`}
+                  >
+                    <img src={img} alt={`View ${idx}`} className="w-full h-full object-cover" />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-col">
+            <div className="mb-2">
+              <span className="text-[#c4a47c] text-xs font-bold tracking-[0.3em] uppercase">{product.category}</span>
+            </div>
+            <h1 className="logo-font text-4xl md:text-5xl font-medium mb-4">{product.name}</h1>
+            <p className="text-2xl font-light mb-8">{product.price.toLocaleString()} DZD</p>
+
+            <div className="prose prose-sm text-gray-500 mb-10 leading-relaxed">
+              <p>{product.description || "Aucune description disponible pour ce produit."}</p>
+            </div>
+
+            {product.sizes && product.sizes.length > 0 && (
+              <div className="mb-8">
+                <div className="flex justify-between mb-4">
+                  <span className="text-sm font-bold uppercase tracking-widest">Taille</span>
+                </div>
+                <div className="flex flex-wrap gap-3">
+                  {product.sizes.map(size => (
+                    <button
+                      key={size}
+                      onClick={() => setSelectedSize(size)}
+                      className={`w-12 h-12 flex items-center justify-center border transition-all ${
+                        selectedSize === size 
+                          ? 'bg-black text-white border-black' 
+                          : 'bg-white text-gray-600 border-gray-200 hover:border-black'
+                      }`}
+                    >
+                      {size}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {product.colors && product.colors.length > 0 && (
+              <div className="mb-10">
+                <span className="text-sm font-bold uppercase tracking-widest block mb-4">Couleur</span>
+                <div className="flex flex-wrap gap-3">
+                  {product.colors.map(color => (
+                    <button
+                      key={color}
+                      onClick={() => setSelectedColor(color)}
+                      className={`px-4 py-2 border transition-all text-sm font-medium ${
+                        selectedColor === color 
+                          ? 'bg-black text-white border-black' 
+                          : 'bg-white text-gray-600 border-gray-200 hover:border-black'
+                      }`}
+                    >
+                      {color}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="mt-auto space-y-4">
+              <button 
+                onClick={handleAddToCart}
+                className="w-full bg-[#1a1a1a] text-white py-5 text-sm font-bold uppercase tracking-widest hover:bg-[#c4a47c] transition duration-300 flex items-center justify-center gap-3"
+              >
+                <ShoppingBag size={18} /> Ajouter au Panier
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// --- Composant Store Front (المعدل للروابط) ---
+const StoreFront = ({ onAdminClick, cart, addToCart, removeFromCart }) => {
+  const navigate = useNavigate(); // 👈 4. استخدام navigate
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [showCheckout, setShowCheckout] = useState(false);
   const [formData, setFormData] = useState({ name: '', phone: '', wilaya: '', commune: '' });
   const [orderComplete, setOrderComplete] = useState(false);
-  const [deliveryType, setDeliveryType] = useState('home'); // 'home' | 'desk'
+  const [deliveryType, setDeliveryType] = useState('home');
   const [deliveryFees, setDeliveryFees] = useState({});
-  const [selectedCategory, setSelectedCategory] = useState('Tout'); // New State for Filtering
+  const [selectedCategory, setSelectedCategory] = useState('Tout');
   
-  // Real-time products from Firebase
   const [products, setProducts] = useState([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [user, setUser] = useState(null); 
@@ -975,14 +1126,10 @@ const StoreFront = ({ onAdminClick, cart, addToCart, removeFromCart, onProductCl
 
   const allProducts = products.length > 0 ? products : defaultProducts;
   
-  // Define standard categories to always show
   const PREDEFINED_CATEGORIES = ['Costumes', 'Chaussures', 'Accessoires', 'Chemises', 'Manteaux', 'Pantalon'];
-
-  // Extract unique categories from products and merge with predefined
   const dynamicCategories = allProducts.map(p => p.category).filter(Boolean);
   const categories = ['Tout', ...new Set([...PREDEFINED_CATEGORIES, ...dynamicCategories])];
 
-  // Filter products based on selection
   const displayProducts = selectedCategory === 'Tout' 
     ? allProducts 
     : allProducts.filter(p => p.category === selectedCategory);
@@ -992,10 +1139,8 @@ const StoreFront = ({ onAdminClick, cart, addToCart, removeFromCart, onProductCl
     setIsCartOpen(true);
   };
   
-  // Re-calculating total locally for display
   const subtotal = cart.reduce((sum, item) => sum + item.price, 0);
   
-  // FIX: Safe fee retrieval
   const currentWilayaFees = (formData.wilaya && deliveryFees[formData.wilaya]) 
                             ? deliveryFees[formData.wilaya] 
                             : {}; 
@@ -1032,7 +1177,7 @@ const StoreFront = ({ onAdminClick, cart, addToCart, removeFromCart, onProductCl
         customerPhone: formData.phone,
         customerWilaya: formData.wilaya,
         customerCommune: formData.commune,
-        deliveryType: deliveryType, // 'home' or 'desk'
+        deliveryType: deliveryType, 
         deliveryPrice: deliveryPrice,
         itemsCount: cart.length,
         subtotal: subtotal,
@@ -1052,7 +1197,7 @@ const StoreFront = ({ onAdminClick, cart, addToCart, removeFromCart, onProductCl
     <div className="bg-[#fcfcfc] text-[#1a1a1a] min-h-screen font-sans selection:bg-[#c4a47c] selection:text-white">
       <nav className="fixed top-0 w-full z-50 bg-white/80 backdrop-blur-md border-b border-gray-100 transition-all duration-300">
         <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
-          <div className="logo-font text-2xl font-bold tracking-tighter uppercase border-b-2 border-black pb-1 cursor-pointer" onClick={() => {}}>Élégance</div>
+          <div className="logo-font text-2xl font-bold tracking-tighter uppercase border-b-2 border-black pb-1 cursor-pointer" onClick={() => navigate('/')}>Élégance</div>
           
           <div className="hidden md:flex space-x-10 text-[11px] font-bold tracking-[0.2em] uppercase">
             <a href="#vetements" className="hover:text-[#c4a47c] transition duration-300 relative after:content-[''] after:absolute after:w-0 after:h-[1px] after:bg-[#c4a47c] after:left-0 after:-bottom-1 after:transition-all hover:after:w-full">Prêt-à-porter</a>
@@ -1123,7 +1268,8 @@ const StoreFront = ({ onAdminClick, cart, addToCart, removeFromCart, onProductCl
                     {displayProducts.map((product) => {
                       const displayImage = (product.images && product.images.length > 0) ? product.images[0] : (product.image || product.img);
                       return (
-                      <div key={product.id} onClick={() => onProductClick(product.id)} className="group cursor-pointer">
+                      // 👈 5. استخدام التنقل هنا بدلاً من onProductClick
+                      <div key={product.id} onClick={() => navigate(`/product/${product.id}`)} className="group cursor-pointer">
                         <div className="overflow-hidden bg-[#f0f0f0] aspect-[3/4] mb-6 relative">
                           <img src={displayImage} className="w-full h-full object-cover transition duration-1000 ease-in-out group-hover:scale-110" alt={product.name} />
                           <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
@@ -1204,11 +1350,11 @@ const StoreFront = ({ onAdminClick, cart, addToCart, removeFromCart, onProductCl
                     </div>
                     <button onClick={() => removeFromCart(i)} className="text-gray-300 hover:text-red-500 transition"><Trash2 size={16} /></button>
                   </div>
-              )}))}
+              )
+            }))}
           </div>
 
           <div className="p-8 bg-gray-50 space-y-6 border-t border-gray-100">
-            {/* Total Section Display */}
              {cart.length > 0 && (
               <div className="space-y-2 border-b border-gray-200 pb-4">
                 <div className="flex justify-between text-xs text-gray-400">
@@ -1231,7 +1377,6 @@ const StoreFront = ({ onAdminClick, cart, addToCart, removeFromCart, onProductCl
                 <input placeholder="NOM COMPLET" className="w-full bg-white border border-gray-200 p-4 text-[11px] font-bold tracking-widest outline-none focus:border-[#c4a47c] transition" onChange={e => setFormData({...formData, name: e.target.value})} />
                 <input placeholder="TÉLÉPHONE" className="w-full bg-white border border-gray-200 p-4 text-[11px] font-bold tracking-widest outline-none focus:border-[#c4a47c] transition" onChange={e => setFormData({...formData, phone: e.target.value})} />
                 <div className="grid grid-cols-2 gap-3">
-                   {/* Wilaya Selector - Dynamic from WILAYAS constant */}
                    <select 
                      className="w-full bg-white border border-gray-200 p-4 text-[11px] font-bold tracking-widest outline-none focus:border-[#c4a47c] transition"
                      value={formData.wilaya}
@@ -1246,7 +1391,6 @@ const StoreFront = ({ onAdminClick, cart, addToCart, removeFromCart, onProductCl
                   <input placeholder="COMMUNE" className="w-full bg-white border border-gray-200 p-4 text-[11px] font-bold tracking-widest outline-none focus:border-[#c4a47c] transition" onChange={e => setFormData({...formData, commune: e.target.value})} />
                 </div>
                 
-                {/* Delivery Selector */}
                 <div className="grid grid-cols-2 gap-3 mt-2">
                   <button 
                     className={`p-3 border rounded-lg text-[10px] font-bold uppercase tracking-wide transition-all ${deliveryType === 'desk' ? 'border-[#c4a47c] bg-amber-50 text-[#c4a47c]' : 'border-gray-200 text-gray-400 hover:border-gray-300'}`}
@@ -1298,13 +1442,10 @@ const StoreFront = ({ onAdminClick, cart, addToCart, removeFromCart, onProductCl
   );
 };
 
-// --- App Racine ---
+// --- App Racine (الجديد باستخدام Router) ---
 const App = () => {
-  const [currentView, setCurrentView] = useState('store'); // 'store', 'admin', 'product'
-  const [activeProductId, setActiveProductId] = useState(null);
   const [cart, setCart] = useState([]);
 
-  // Load Tailwind
   useEffect(() => {
     if (!document.getElementById('tailwind-script')) {
       const script = document.createElement('script');
@@ -1322,47 +1463,39 @@ const App = () => {
     setCart(cart.filter((_, index) => index !== indexToRemove));
   };
 
-  const handleProductClick = (id) => {
-    setActiveProductId(id);
-    setCurrentView('product');
-    window.scrollTo(0,0);
-  };
-
-  const handleBackToStore = () => {
-    setCurrentView('store');
-    setActiveProductId(null);
-  };
-
-  const handleAdminClick = () => {
-    setCurrentView('admin');
-  };
-
   return (
-    <>
-      {currentView === 'store' && (
-        <StoreFront 
-          onAdminClick={handleAdminClick} 
-          cart={cart}
-          addToCart={addToCart}
-          removeFromCart={removeFromCart}
-          onProductClick={handleProductClick}
+    // 👈 6. استخدام BrowserRouter و Routes هنا
+    <BrowserRouter>
+      <Routes>
+        <Route 
+          path="/" 
+          element={
+            <StoreFront 
+              onAdminClick={() => window.location.href = '/admin'} 
+              cart={cart}
+              addToCart={addToCart}
+              removeFromCart={removeFromCart}
+            />
+          } 
         />
-      )}
-
-      {currentView === 'product' && activeProductId && (
-        <ProductDetails 
-          productId={activeProductId}
-          onAddToCart={addToCart} 
-          onBack={handleBackToStore}
+        <Route 
+          path="/product/:id" 
+          element={
+            <ProductDetails 
+              onAddToCart={addToCart} 
+            />
+          } 
         />
-      )}
-
-      {currentView === 'admin' && (
-        <AdminPanel 
-          onBackToStore={handleBackToStore} 
+        <Route 
+          path="/admin" 
+          element={
+            <AdminPanel 
+              onBackToStore={() => window.location.href = '/'} 
+            />
+          } 
         />
-      )}
-    </>
+      </Routes>
+    </BrowserRouter>
   );
 };
 
