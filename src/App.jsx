@@ -1,3 +1,5 @@
+// أضف هذا السطر مع بقية الـ imports في الأعلى
+import { BrowserRouter, Routes, Route, useNavigate, useParams } from 'react-router-dom';
 /* global __firebase_config, __app_id, __initial_auth_token */
 import React, { useState, useEffect } from 'react';
 import { 
@@ -9,7 +11,7 @@ import {
 import { initializeApp } from 'firebase/app';
 import { 
   getFirestore, collection, addDoc, onSnapshot, deleteDoc, 
-  doc, updateDoc 
+  doc, updateDoc, getDoc
 } from 'firebase/firestore';
 import { 
   getAuth, signInAnonymously, signInWithCustomToken, 
@@ -776,64 +778,78 @@ const AdminPanel = ({ onBackToStore }) => {
 };
 
 // --- Composant Détails du Produit ---
-const ProductDetails = ({ product, onBack, onAddToCart }) => {
-  const [activeImage, setActiveImage] = useState(
-    (product.images && product.images.length > 0) ? product.images[0] : (product.image || product.img)
-  );
+const ProductDetails = ({ onAddToCart }) => {
+  const { id } = useParams(); // أخذ الآيدي من الرابط
+  const navigate = useNavigate();
+  const [product, setProduct] = useState(null);
   const [selectedSize, setSelectedSize] = useState(null);
   const [selectedColor, setSelectedColor] = useState(null);
+  const [activeImage, setActiveImage] = useState(null);
 
-  const images = (product.images && product.images.length > 0) ? product.images : [(product.image || product.img)];
+  // جلب بيانات المنتج من فايربيس باستخدام الـ ID
+  useEffect(() => {
+    const fetchProduct = async () => {
+      try {
+        const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'products', id);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setProduct({ id: docSnap.id, ...data });
+          setActiveImage(data.images && data.images.length > 0 ? data.images[0] : data.image);
+        } else {
+            // بحث في المنتجات الافتراضية إذا لم يوجد في قاعدة البيانات (لأغراض العرض)
+            const defaultProducts = [
+                { id: 'def1', name: 'Pantalon Chino Signature', price: 6500, image: 'https://images.unsplash.com/photo-1541099649105-f69ad21f3246?q=80&w=600', category: 'Pantalon' },
+                { id: 'def2', name: 'Chemise Slim Oxford', price: 4800, image: 'https://images.unsplash.com/photo-1596755094514-f87e34085b2c?q=80&w=600', category: 'Chemise' },
+                { id: 'def3', name: 'Manteau Laine & Cachemire', price: 24000, image: 'https://images.unsplash.com/photo-1539533113208-f6df8cc8b543?q=80&w=600', category: 'Manteau' }
+            ];
+            const defProd = defaultProducts.find(p => p.id === id);
+            if(defProd) {
+                setProduct(defProd);
+                setActiveImage(defProd.image);
+            }
+        }
+      } catch (error) {
+        console.error("Error", error);
+      }
+    };
+    fetchProduct();
+  }, [id]);
 
   const handleAddToCart = () => {
-    // Si le produit a des tailles mais aucune n'est sélectionnée, alerter l'utilisateur
     if (product.sizes && product.sizes.length > 0 && !selectedSize) {
       alert("Veuillez sélectionner une taille.");
       return;
     }
-    
-    // Si le produit a des couleurs mais aucune n'est sélectionnée
     if (product.colors && product.colors.length > 0 && !selectedColor) {
       alert("Veuillez sélectionner une couleur.");
       return;
     }
-    
-    // Créer un objet produit avec la taille et couleur sélectionnées pour le panier
-    const productToAdd = {
-      ...product,
-      selectedSize: selectedSize,
-      selectedColor: selectedColor
-    };
-
-    onAddToCart(productToAdd);
+    onAddToCart({ ...product, selectedSize, selectedColor });
+    alert("Produit ajouté au panier !");
   };
+
+  if (!product) return <div className="p-20 text-center"><Loader className="animate-spin inline" /> Chargement...</div>;
+
+  const images = (product.images && product.images.length > 0) ? product.images : [product.image];
 
   return (
     <div className="min-h-screen bg-white animate-fade-in pt-24 pb-12">
       <div className="max-w-7xl mx-auto px-6">
-        <button 
-          onClick={onBack}
-          className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-gray-500 hover:text-black mb-8 transition-colors"
-        >
-          <ArrowLeft size={18} /> Retour
+        <button onClick={() => navigate('/')} className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-gray-500 hover:text-black mb-8 transition-colors">
+          <ArrowLeft size={18} /> Retour à la boutique
         </button>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20">
-          {/* Section Images */}
+          {/* الصور */}
           <div className="space-y-6">
             <div className="aspect-[3/4] bg-gray-50 rounded-lg overflow-hidden">
               <img src={activeImage} alt={product.name} className="w-full h-full object-cover" />
             </div>
-            
-            {/* Galerie */}
             {images.length > 1 && (
               <div className="flex gap-4 overflow-x-auto pb-2 no-scrollbar">
                 {images.map((img, idx) => (
-                  <button 
-                    key={idx} 
-                    onClick={() => setActiveImage(img)}
-                    className={`w-20 h-24 flex-shrink-0 rounded-md overflow-hidden border-2 transition-all ${activeImage === img ? 'border-black' : 'border-transparent opacity-70 hover:opacity-100'}`}
-                  >
+                  <button key={idx} onClick={() => setActiveImage(img)} className={`w-20 h-24 flex-shrink-0 rounded-md overflow-hidden border-2 transition-all ${activeImage === img ? 'border-black' : 'border-transparent opacity-70 hover:opacity-100'}`}>
                     <img src={img} alt={`View ${idx}`} className="w-full h-full object-cover" />
                   </button>
                 ))}
@@ -841,80 +857,41 @@ const ProductDetails = ({ product, onBack, onAddToCart }) => {
             )}
           </div>
 
-          {/* Section Infos */}
+          {/* التفاصيل */}
           <div className="flex flex-col">
-            <div className="mb-2">
-              <span className="text-[#c4a47c] text-xs font-bold tracking-[0.3em] uppercase">{product.category}</span>
-            </div>
+            <div className="mb-2"><span className="text-[#c4a47c] text-xs font-bold tracking-[0.3em] uppercase">{product.category}</span></div>
             <h1 className="logo-font text-4xl md:text-5xl font-medium mb-4">{product.name}</h1>
             <p className="text-2xl font-light mb-8">{product.price.toLocaleString()} DZD</p>
+            <div className="prose prose-sm text-gray-500 mb-10 leading-relaxed"><p>{product.description || "Description non disponible."}</p></div>
 
-            <div className="prose prose-sm text-gray-500 mb-10 leading-relaxed">
-              <p>{product.description || "Aucune description disponible pour ce produit. Fabriqué avec des matériaux de haute qualité pour assurer confort et élégance."}</p>
-            </div>
-
-            {/* Sélection de taille */}
+            {/* المقاسات */}
             {product.sizes && product.sizes.length > 0 && (
               <div className="mb-8">
-                <div className="flex justify-between mb-4">
-                  <span className="text-sm font-bold uppercase tracking-widest">Taille</span>
-                  <span className="text-xs text-gray-400 underline cursor-pointer">Guide des tailles</span>
-                </div>
+                <span className="text-sm font-bold uppercase tracking-widest block mb-4">Taille</span>
                 <div className="flex flex-wrap gap-3">
                   {product.sizes.map(size => (
-                    <button
-                      key={size}
-                      onClick={() => setSelectedSize(size)}
-                      className={`w-12 h-12 flex items-center justify-center border transition-all ${
-                        selectedSize === size 
-                          ? 'bg-black text-white border-black' 
-                          : 'bg-white text-gray-600 border-gray-200 hover:border-black'
-                      }`}
-                    >
-                      {size}
-                    </button>
+                    <button key={size} onClick={() => setSelectedSize(size)} className={`w-12 h-12 flex items-center justify-center border transition-all ${selectedSize === size ? 'bg-black text-white border-black' : 'bg-white text-gray-600 border-gray-200 hover:border-black'}`}>{size}</button>
                   ))}
                 </div>
-                {selectedSize && <p className="text-xs text-gray-500 mt-2">Taille sélectionnée: <span className="font-bold">{selectedSize}</span></p>}
               </div>
             )}
 
-            {/* Sélection de couleur */}
+            {/* الألوان */}
             {product.colors && product.colors.length > 0 && (
-              <div className="mb-10">
-                <span className="text-sm font-bold uppercase tracking-widest block mb-4">Couleur</span>
-                <div className="flex flex-wrap gap-3">
-                  {product.colors.map(color => (
-                    <button
-                      key={color}
-                      onClick={() => setSelectedColor(color)}
-                      className={`px-4 py-2 border transition-all text-sm font-medium ${
-                        selectedColor === color 
-                          ? 'bg-black text-white border-black' 
-                          : 'bg-white text-gray-600 border-gray-200 hover:border-black'
-                      }`}
-                    >
-                      {color}
-                    </button>
-                  ))}
+                <div className="mb-10">
+                  <span className="text-sm font-bold uppercase tracking-widest block mb-4">Couleur</span>
+                  <div className="flex flex-wrap gap-3">
+                    {product.colors.map(color => (
+                      <button key={color} onClick={() => setSelectedColor(color)} className={`px-4 py-2 border transition-all text-sm font-medium ${selectedColor === color ? 'bg-black text-white border-black' : 'bg-white text-gray-600 border-gray-200 hover:border-black'}`}>{color}</button>
+                    ))}
+                  </div>
                 </div>
-                {selectedColor && <p className="text-xs text-gray-500 mt-2">Couleur sélectionnée: <span className="font-bold">{selectedColor}</span></p>}
-              </div>
-            )}
+              )}
 
             <div className="mt-auto space-y-4">
-              <button 
-                onClick={handleAddToCart}
-                className="w-full bg-[#1a1a1a] text-white py-5 text-sm font-bold uppercase tracking-widest hover:bg-[#c4a47c] transition duration-300 flex items-center justify-center gap-3"
-              >
+              <button onClick={handleAddToCart} className="w-full bg-[#1a1a1a] text-white py-5 text-sm font-bold uppercase tracking-widest hover:bg-[#c4a47c] transition duration-300 flex items-center justify-center gap-3">
                 <ShoppingBag size={18} /> Ajouter au Panier
               </button>
-              
-              <div className="flex gap-4 text-xs text-gray-500 uppercase tracking-widest justify-center pt-4 border-t border-gray-100">
-                <span className="flex items-center gap-2"><CheckCircle size={14} /> Livraison Rapide</span>
-                <span className="flex items-center gap-2"><CheckCircle size={14} /> Retour Facile</span>
-                <span className="flex items-center gap-2"><CheckCircle size={14} /> Paiement Sécurisé</span>
-              </div>
             </div>
           </div>
         </div>
@@ -924,8 +901,8 @@ const ProductDetails = ({ product, onBack, onAddToCart }) => {
 };
 
 // --- Composant Store Front ---
-const StoreFront = ({ onAdminClick }) => {
-  const [cart, setCart] = useState([]);
+const StoreFront = ({ onAdminClick, cart, addToCart }) => {
+  const navigate = useNavigate();
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [showCheckout, setShowCheckout] = useState(false);
   const [formData, setFormData] = useState({ name: '', phone: '', wilaya: '', commune: '' });
@@ -982,13 +959,10 @@ const StoreFront = ({ onAdminClick }) => {
 
   const displayProducts = products.length > 0 ? products : defaultProducts;
 
-  const addToCart = (product) => {
-    // Si ajouté depuis la liste (Quick Add), on ne gère pas la taille pour l'instant ou on pourrait ouvrir le modal
-    // Pour simplifier, l'ajout rapide ajoute le produit tel quel.
-    setCart([...cart, product]);
+  const handleQuickAdd = (product) => {
+    // نستخدم دالة الإضافة التي جلبناها من App
+    addToCart(product); 
     setIsCartOpen(true);
-    // Si on est dans les détails, on ferme la vue détails ou on reste ? 
-    // Généralement on ouvre juste le panier.
   };
 
   const removeFromCart = (index) => {
@@ -1107,11 +1081,11 @@ const StoreFront = ({ onAdminClick }) => {
                    // Use array if available, fallback to single string, fallback to img (default products)
                    const displayImage = (product.images && product.images.length > 0) ? product.images[0] : (product.image || product.img);
                    return (
-                  <div key={product.id} onClick={() => setSelectedProduct(product)} className="group cursor-pointer">
+                  <div key={product.id} onClick={() => navigate(`/product/${product.id}`)} className="group cursor-pointer">
                     <div className="overflow-hidden bg-[#f0f0f0] aspect-[3/4] mb-6 relative">
                       <img src={displayImage} className="w-full h-full object-cover transition duration-1000 ease-in-out group-hover:scale-110" alt={product.name} />
                       <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-                      <button onClick={(e) => { e.stopPropagation(); addToCart(product); }} className="absolute bottom-0 left-0 w-full bg-white text-black py-4 translate-y-full group-hover:translate-y-0 transition-transform duration-500 text-[10px] font-bold uppercase tracking-widest hover:bg-black hover:text-white border-t border-black">Ajouter au Panier</button>
+                      <button onClick={(e) => { e.stopPropagation(); handleQuickAdd(product); }} className="absolute bottom-0 left-0 w-full bg-white text-black py-4 translate-y-full group-hover:translate-y-0 transition-transform duration-500 text-[10px] font-bold uppercase tracking-widest hover:bg-black hover:text-white border-t border-black">Ajouter au Panier</button>
                     </div>
                     <div className="flex justify-between items-start">
                        <div>
@@ -1233,9 +1207,15 @@ const StoreFront = ({ onAdminClick }) => {
 
 // --- App Racine ---
 const App = () => {
-  const [view, setView] = useState('store'); 
+  // 1. نقلنا حالة السلة (Cart) لتكون هنا، حتى لا تُحذف عند تغيير الصفحة
+  const [cart, setCart] = useState([]);
 
-  // Injection Tailwind
+  // دالة لإضافة منتج للسلة
+  const addToCart = (product) => {
+    setCart([...cart, product]);
+  };
+
+  // كود استدعاء Tailwind (كما كان سابقاً)
   useEffect(() => {
     if (!document.getElementById('tailwind-script')) {
       const script = document.createElement('script');
@@ -1246,13 +1226,44 @@ const App = () => {
   }, []);
 
   return (
-    <>
-      {view === 'store' ? (
-        <StoreFront onAdminClick={() => setView('admin')} />
-      ) : (
-        <AdminPanel onBackToStore={() => setView('store')} />
-      )}
-    </>
+    // 2. إعداد نظام التوجيه (Router)
+    <BrowserRouter>
+      <Routes>
+        
+        {/* الرابط الرئيسي: نمرر له السلة ودالة الإضافة */}
+        <Route 
+          path="/" 
+          element={
+            <StoreFront 
+              onAdminClick={() => window.location.href = '/admin'} 
+              cart={cart}
+              addToCart={addToCart}
+            />
+          } 
+        />
+
+        {/* رابط صفحة المنتج الديناميكي */}
+        <Route 
+          path="/product/:id" 
+          element={
+            <ProductDetails 
+              onAddToCart={addToCart} 
+            />
+          } 
+        />
+
+        {/* رابط لوحة التحكم */}
+        <Route 
+          path="/admin" 
+          element={
+            <AdminPanel 
+              onBackToStore={() => window.location.href = '/'} 
+            />
+          } 
+        />
+
+      </Routes>
+    </BrowserRouter>
   );
 };
 
