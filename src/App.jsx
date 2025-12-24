@@ -120,7 +120,11 @@ const AdminPanel = ({ onBackToStore }) => {
     colors: []
   });
 
-  const AVAILABLE_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL'];
+  const CLOTHING_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL'];
+  const SHOE_SIZES = [];
+  for (let i = 35; i <= 45; i += 0.5) {
+    SHOE_SIZES.push(i.toString());
+  }
   const AVAILABLE_COLORS = ['Noir', 'Blanc', 'Bleu', 'Rouge', 'Vert', 'Jaune', 'Gris', 'Beige', 'Marron', 'Rose'];
 
   // Auth Effect
@@ -556,7 +560,7 @@ const AdminPanel = ({ onBackToStore }) => {
                 <div>
                   <label className="text-sm font-bold text-slate-700 block mb-2">Tailles disponibles</label>
                   <div className="flex flex-wrap gap-2">
-                    {AVAILABLE_SIZES.map(size => (
+                    {(editingProduct.category === 'Chaussures' ? SHOE_SIZES : CLOTHING_SIZES).map(size => (
                       <button
                         key={size}
                         type="button"
@@ -648,7 +652,7 @@ const AdminPanel = ({ onBackToStore }) => {
               <div>
                 <label className="text-sm font-bold text-slate-700 block mb-2">Tailles disponibles</label>
                 <div className="flex flex-wrap gap-2">
-                  {AVAILABLE_SIZES.map(size => (
+                  {(newProduct.category === 'Chaussures' ? SHOE_SIZES : CLOTHING_SIZES).map(size => (
                     <button
                       key={size}
                       type="button"
@@ -737,76 +741,76 @@ const AdminPanel = ({ onBackToStore }) => {
 
         {activeTab === 'delivery' && (
           <div className="bg-white rounded-2xl shadow-sm overflow-hidden animate-fade-in">
-             <div className="p-6 border-b border-slate-100">
-               <h3 className="text-lg font-bold text-slate-800">Gestion des Tarifs de Livraison (Wilayas)</h3>
-               <p className="text-sm text-slate-500">Définissez les prix de livraison pour chaque wilaya. Cliquez sur l'icône de sauvegarde pour enregistrer.</p>
-             </div>
-             <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead className="bg-slate-50 border-b border-slate-100">
-                    <tr>
-                      <th className="p-4 text-sm font-semibold text-slate-600">Wilaya</th>
-                      <th className="p-4 text-sm font-semibold text-slate-600">Prix Bureau (Stop Desk)</th>
-                      <th className="p-4 text-sm font-semibold text-slate-600">Prix Domicile</th>
-                      <th className="p-4 text-sm font-semibold text-slate-600 w-24">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {WILAYAS.map((wilaya, index) => {
-                      const fees = localFees[wilaya] || { home: 800, desk: 400 };
-                      const deskVal = fees.desk !== undefined ? fees.desk : 400;
-                      const homeVal = fees.home !== undefined ? fees.home : 800;
-                      
-                      return (
-                        <tr key={wilaya} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
-                           <td className="p-4 font-bold text-slate-700">
-                             <span className="inline-block w-8 text-slate-400 font-normal text-xs">{index + 1}</span> {wilaya}
-                           </td>
-                           <td className="p-4">
-                              <div className="relative max-w-[150px]">
-                                <input 
-                                  type="number" 
-                                  value={deskVal}
-                                  onChange={(e) => handleFeeChange(wilaya, 'desk', e.target.value)}
-                                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none text-sm"
-                                />
-                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">DA</span>
-                              </div>
-                           </td>
-                           <td className="p-4">
-                              <div className="relative max-w-[150px]">
-                                <input 
-                                  type="number" 
-                                  value={homeVal}
-                                  onChange={(e) => handleFeeChange(wilaya, 'home', e.target.value)}
-                                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none text-sm"
-                                />
-                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">DA</span>
-                              </div>
-                           </td>
-                           <td className="p-4">
-                              <button 
-                                onClick={() => saveFee(wilaya)}
-                                className="p-2 bg-amber-50 text-amber-600 rounded-lg hover:bg-amber-100 transition-colors"
-                                title="Enregistrer"
-                              >
-                                <Save size={18} />
-                              </button>
-                           </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-             </div>
+              <div className="p-6 border-b border-slate-100">
+                <h3 className="text-lg font-bold text-slate-800">Gestion des Tarifs de Livraison (Wilayas)</h3>
+                <p className="text-sm text-slate-500">Définissez les prix de livraison pour chaque wilaya. Cliquez sur l'icône de sauvegarde pour enregistrer.</p>
+              </div>
+              <div className="overflow-x-auto">
+                 <table className="w-full text-left border-collapse">
+                   <thead className="bg-slate-50 border-b border-slate-100">
+                     <tr>
+                       <th className="p-4 text-sm font-semibold text-slate-600">Wilaya</th>
+                       <th className="p-4 text-sm font-semibold text-slate-600">Prix Bureau (Stop Desk)</th>
+                       <th className="p-4 text-sm font-semibold text-slate-600">Prix Domicile</th>
+                       <th className="p-4 text-sm font-semibold text-slate-600 w-24">Action</th>
+                     </tr>
+                   </thead>
+                   <tbody>
+                     {WILAYAS.map((wilaya, index) => {
+                       const fees = localFees[wilaya] || { home: 800, desk: 400 };
+                       const deskVal = fees.desk !== undefined ? fees.desk : 400;
+                       const homeVal = fees.home !== undefined ? fees.home : 800;
+                       
+                       return (
+                         <tr key={wilaya} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+                            <td className="p-4 font-bold text-slate-700">
+                              <span className="inline-block w-8 text-slate-400 font-normal text-xs">{index + 1}</span> {wilaya}
+                            </td>
+                            <td className="p-4">
+                               <div className="relative max-w-[150px]">
+                                 <input 
+                                   type="number" 
+                                   value={deskVal}
+                                   onChange={(e) => handleFeeChange(wilaya, 'desk', e.target.value)}
+                                   className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none text-sm"
+                                 />
+                                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">DA</span>
+                               </div>
+                            </td>
+                            <td className="p-4">
+                               <div className="relative max-w-[150px]">
+                                 <input 
+                                   type="number" 
+                                   value={homeVal}
+                                   onChange={(e) => handleFeeChange(wilaya, 'home', e.target.value)}
+                                   className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none text-sm"
+                                 />
+                                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">DA</span>
+                               </div>
+                            </td>
+                            <td className="p-4">
+                               <button 
+                                 onClick={() => saveFee(wilaya)}
+                                 className="p-2 bg-amber-50 text-amber-600 rounded-lg hover:bg-amber-100 transition-colors"
+                                 title="Enregistrer"
+                               >
+                                 <Save size={18} />
+                               </button>
+                            </td>
+                         </tr>
+                       );
+                     })}
+                   </tbody>
+                 </table>
+              </div>
           </div>
         )}
 
         {activeTab === 'orders' && (
           <div className="space-y-4 animate-fade-in">
-             {orders.length === 0 && (
+              {orders.length === 0 && (
                 <div className="p-12 text-center text-slate-400 italic bg-white rounded-2xl border border-slate-100">Aucune commande pour le moment.</div>
-             )}
+              )}
             {orders.map((order) => (
               <div key={order.id} className="bg-white p-6 rounded-2xl shadow-sm border-l-4 border-amber-500 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 transition-all hover:shadow-md">
                 <div className="flex-1">
