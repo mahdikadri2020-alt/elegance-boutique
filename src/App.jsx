@@ -1,7 +1,5 @@
 /* global __firebase_config, __app_id, __initial_auth_token */
 import React, { useState, useEffect } from 'react';
-// 👇 1. استيراد مكتبة الروابط (مهم جداً)
-import { BrowserRouter, Routes, Route, useNavigate, useParams } from 'react-router-dom';
 import { 
   LayoutDashboard, Package, PlusCircle, ShoppingCart, Trash2, 
   TrendingUp, Users, Image as ImageIcon, CheckCircle, Lock, 
@@ -11,7 +9,7 @@ import {
 import { initializeApp } from 'firebase/app';
 import { 
   getFirestore, collection, addDoc, onSnapshot, deleteDoc, 
-  doc, updateDoc, getDoc, setDoc // 👈 2. تأكدنا من وجود getDoc
+  doc, updateDoc, getDoc, setDoc 
 } from 'firebase/firestore';
 import { 
   getAuth, signInAnonymously, signInWithCustomToken, 
@@ -19,6 +17,7 @@ import {
 } from 'firebase/auth';
 
 // --- Configuration Firebase ---
+// Using environment variables provided by the platform or falling back to defaults
 const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
   apiKey: "AIzaSyAlWIMQPdg9F48Q2r6M3Xxv3pJq08Hk8ps",
   authDomain: "elegance-boutique-38d2b.firebaseapp.com",
@@ -165,7 +164,6 @@ const AdminPanel = ({ onBackToStore }) => {
         feesMap[doc.id] = doc.data();
       });
       setDeliveryFees(feesMap);
-      // Initialize local state for editing
       setLocalFees(prev => ({...feesMap, ...prev}));
     }, (error) => console.error("Fees fetch error:", error));
 
@@ -182,7 +180,6 @@ const AdminPanel = ({ onBackToStore }) => {
     setLoginError('');
 
     setTimeout(() => {
-      // Identifiants codés en dur pour la démo
       if (loginData.username === 'admin' && loginData.password === 'adil123789') {
         setIsAuthenticated(true);
       } else {
@@ -882,10 +879,8 @@ const AdminPanel = ({ onBackToStore }) => {
   );
 };
 
-// --- 3. Composant ProductDetails (تم إضافته ليعمل مع الروابط) ---
-const ProductDetails = ({ onAddToCart }) => {
-  const { id } = useParams(); 
-  const navigate = useNavigate();
+// --- 3. Composant ProductDetails (State-based Navigation) ---
+const ProductDetails = ({ productId, onBack, onAddToCart }) => {
   const [product, setProduct] = useState(null);
   const [selectedSize, setSelectedSize] = useState(null);
   const [selectedColor, setSelectedColor] = useState(null);
@@ -894,7 +889,7 @@ const ProductDetails = ({ onAddToCart }) => {
   useEffect(() => {
     const fetchProduct = async () => {
       try {
-        const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'products', id);
+        const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'products', productId);
         const docSnap = await getDoc(docRef);
 
         if (docSnap.exists()) {
@@ -902,26 +897,26 @@ const ProductDetails = ({ onAddToCart }) => {
           setProduct({ id: docSnap.id, ...data });
           setActiveImage(data.images && data.images.length > 0 ? data.images[0] : (data.image || data.img));
         } else {
-            // بيانات افتراضية إذا لم يوجد المنتج
+            // Fallback default data
             const defaultProducts = [
                 { id: 'def1', name: 'Pantalon Chino Signature', price: 6500, image: 'https://images.unsplash.com/photo-1541099649105-f69ad21f3246?q=80&w=600', category: 'Pantalon' },
-                { id: 'def2', name: 'Chemise Slim Oxford', price: 4800, image: 'https://images.unsplash.com/photo-1596755094514-f87e34085b2c?q=80&w=600', category: 'Chemise' },
+                { id: 'def2', name: 'Chemise Slim Oxford', price: 4800, image: 'https://images.unsplash.com/photo-1589310243389-96a5483213a8?q=80&w=600', category: 'Chemise' },
                 { id: 'def3', name: 'Manteau Laine & Cachemire', price: 24000, image: 'https://images.unsplash.com/photo-1539533113208-f6df8cc8b543?q=80&w=600', category: 'Manteau' }
             ];
-            const defProd = defaultProducts.find(p => p.id === id);
+            const defProd = defaultProducts.find(p => p.id === productId);
             if(defProd) {
                 setProduct(defProd);
                 setActiveImage(defProd.image);
             } else {
-                navigate('/');
+                onBack();
             }
         }
       } catch (error) {
         console.error("Error fetching product:", error);
       }
     };
-    fetchProduct();
-  }, [id, navigate]);
+    if (productId) fetchProduct();
+  }, [productId, onBack]);
 
   const handleAddToCart = () => {
     if (!product) return;
@@ -958,7 +953,7 @@ const ProductDetails = ({ onAddToCart }) => {
     <div className="min-h-screen bg-white animate-fade-in pt-24 pb-12">
       <div className="max-w-7xl mx-auto px-6">
         <button 
-          onClick={() => navigate('/')}
+          onClick={onBack}
           className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-gray-500 hover:text-black mb-8 transition-colors"
         >
           <ArrowLeft size={18} /> Retour à la boutique
@@ -1055,9 +1050,8 @@ const ProductDetails = ({ onAddToCart }) => {
   );
 };
 
-// --- Composant Store Front (المعدل للروابط) ---
-const StoreFront = ({ onAdminClick, cart, addToCart, removeFromCart }) => {
-  const navigate = useNavigate(); // 👈 4. استخدام navigate
+// --- Composant Store Front ---
+const StoreFront = ({ onAdminClick, onProductClick, cart, addToCart, removeFromCart }) => {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [showCheckout, setShowCheckout] = useState(false);
   const [formData, setFormData] = useState({ name: '', phone: '', wilaya: '', commune: '' });
@@ -1072,7 +1066,7 @@ const StoreFront = ({ onAdminClick, cart, addToCart, removeFromCart }) => {
   
   const defaultProducts = [
     { id: 'def1', name: 'Pantalon Chino Signature', price: 6500, image: 'https://images.unsplash.com/photo-1541099649105-f69ad21f3246?q=80&w=600', category: 'Pantalon' },
-    { id: 'def2', name: 'Chemise Slim Oxford', price: 4800, image: 'https://images.unsplash.com/photo-1596755094514-f87e34085b2c?q=80&w=600', category: 'Chemise' },
+    { id: 'def2', name: 'Chemise Slim Oxford', price: 4800, image: 'https://images.unsplash.com/photo-1589310243389-96a5483213a8?q=80&w=600', category: 'Chemise' },
     { id: 'def3', name: 'Manteau Laine & Cachemire', price: 24000, image: 'https://images.unsplash.com/photo-1539533113208-f6df8cc8b543?q=80&w=600', category: 'Manteau' }
   ];
 
@@ -1197,7 +1191,7 @@ const StoreFront = ({ onAdminClick, cart, addToCart, removeFromCart }) => {
     <div className="bg-[#fcfcfc] text-[#1a1a1a] min-h-screen font-sans selection:bg-[#c4a47c] selection:text-white">
       <nav className="fixed top-0 w-full z-50 bg-white/80 backdrop-blur-md border-b border-gray-100 transition-all duration-300">
         <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
-          <div className="logo-font text-2xl font-bold tracking-tighter uppercase border-b-2 border-black pb-1 cursor-pointer" onClick={() => navigate('/')}>Élégance</div>
+          <div className="logo-font text-2xl font-bold tracking-tighter uppercase border-b-2 border-black pb-1 cursor-pointer">Élégance</div>
           
           <div className="hidden md:flex space-x-10 text-[11px] font-bold tracking-[0.2em] uppercase">
             <a href="#vetements" className="hover:text-[#c4a47c] transition duration-300 relative after:content-[''] after:absolute after:w-0 after:h-[1px] after:bg-[#c4a47c] after:left-0 after:-bottom-1 after:transition-all hover:after:w-full">Prêt-à-porter</a>
@@ -1225,7 +1219,7 @@ const StoreFront = ({ onAdminClick, cart, addToCart, removeFromCart }) => {
 
           <main className="py-24 px-6 max-w-7xl mx-auto" id="vetements">
             <div className="mb-12 rounded-xl overflow-hidden shadow-sm">
-              <img src="https://images.unsplash.com/photo-1441984904996-e0b6ba687e04?q=80&w=2070" alt="New Collection" className="w-full h-48 md:h-64 object-cover" />
+              <img src="https://images.unsplash.com/photo-1487222477894-8943e31ef7b2?q=80&w=2070" alt="New Collection" className="w-full h-48 md:h-64 object-cover" />
             </div>
 
             <div className="flex flex-col md:flex-row justify-between items-end mb-8">
@@ -1268,8 +1262,7 @@ const StoreFront = ({ onAdminClick, cart, addToCart, removeFromCart }) => {
                     {displayProducts.map((product) => {
                       const displayImage = (product.images && product.images.length > 0) ? product.images[0] : (product.image || product.img);
                       return (
-                      // 👈 5. استخدام التنقل هنا بدلاً من onProductClick
-                      <div key={product.id} onClick={() => navigate(`/product/${product.id}`)} className="group cursor-pointer">
+                      <div key={product.id} onClick={() => onProductClick(product.id)} className="group cursor-pointer">
                         <div className="overflow-hidden bg-[#f0f0f0] aspect-[3/4] mb-6 relative">
                           <img src={displayImage} className="w-full h-full object-cover transition duration-1000 ease-in-out group-hover:scale-110" alt={product.name} />
                           <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
@@ -1442,9 +1435,11 @@ const StoreFront = ({ onAdminClick, cart, addToCart, removeFromCart }) => {
   );
 };
 
-// --- App Racine (الجديد باستخدام Router) ---
+// --- App Racine ---
 const App = () => {
   const [cart, setCart] = useState([]);
+  const [currentView, setCurrentView] = useState('store'); // 'store', 'admin', 'details'
+  const [selectedProductId, setSelectedProductId] = useState(null);
 
   useEffect(() => {
     if (!document.getElementById('tailwind-script')) {
@@ -1463,39 +1458,45 @@ const App = () => {
     setCart(cart.filter((_, index) => index !== indexToRemove));
   };
 
+  const navigateToProduct = (id) => {
+      setSelectedProductId(id);
+      setCurrentView('details');
+      window.scrollTo(0, 0);
+  };
+
+  const navigateToStore = () => {
+      setCurrentView('store');
+      setSelectedProductId(null);
+  };
+
+  const navigateToAdmin = () => {
+      setCurrentView('admin');
+  };
+
   return (
-    // 👈 6. استخدام BrowserRouter و Routes هنا
-    <BrowserRouter>
-      <Routes>
-        <Route 
-          path="/" 
-          element={
-            <StoreFront 
-              onAdminClick={() => window.location.href = '/admin'} 
-              cart={cart}
-              addToCart={addToCart}
-              removeFromCart={removeFromCart}
-            />
-          } 
+    <>
+      {currentView === 'store' && (
+        <StoreFront 
+            onAdminClick={navigateToAdmin} 
+            onProductClick={navigateToProduct}
+            cart={cart}
+            addToCart={addToCart}
+            removeFromCart={removeFromCart}
         />
-        <Route 
-          path="/product/:id" 
-          element={
-            <ProductDetails 
-              onAddToCart={addToCart} 
-            />
-          } 
-        />
-        <Route 
-          path="/admin" 
-          element={
-            <AdminPanel 
-              onBackToStore={() => window.location.href = '/'} 
-            />
-          } 
-        />
-      </Routes>
-    </BrowserRouter>
+      )}
+      {currentView === 'details' && (
+          <ProductDetails 
+            productId={selectedProductId}
+            onBack={navigateToStore}
+            onAddToCart={addToCart}
+          />
+      )}
+      {currentView === 'admin' && (
+          <AdminPanel 
+            onBackToStore={navigateToStore} 
+          />
+      )}
+    </>
   );
 };
 
