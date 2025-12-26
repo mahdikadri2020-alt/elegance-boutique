@@ -130,18 +130,7 @@ const AdminPanel = ({ onBackToStore }) => {
 
   // Auth Effect
   useEffect(() => {
-    const initAuth = async () => {
-      try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
-        }
-      } catch (error) {
-        console.error("Auth error:", error);
-      }
-    };
-    initAuth();
+    // Only subscribe to auth state changes, init is handled in App
     const unsubscribe = onAuthStateChanged(auth, setUser);
     return () => unsubscribe();
   }, []);
@@ -460,6 +449,7 @@ const AdminPanel = ({ onBackToStore }) => {
       </aside>
 
       <main className="flex-1 overflow-y-auto p-4 md:p-10 relative">
+        {/* ... (Existing Admin Panel Content remains unchanged) ... */}
         <header className="flex justify-between items-center mb-8 bg-white p-6 rounded-2xl shadow-sm">
           <div>
             <h2 className="text-2xl font-bold text-slate-800">
@@ -484,7 +474,6 @@ const AdminPanel = ({ onBackToStore }) => {
           </div>
         )}
 
-        {/* ... (Table des produits, etc. - Mêmes composants qu'avant) ... */}
         {activeTab === 'products' && (
           <div className="bg-white rounded-2xl shadow-sm overflow-hidden animate-fade-in">
             <div className="overflow-x-auto">
@@ -740,6 +729,7 @@ const AdminPanel = ({ onBackToStore }) => {
           </div>
         )}
 
+        {/* ... (Delivery and Orders tabs remain unchanged) ... */}
         {activeTab === 'delivery' && (
           <div className="bg-white rounded-2xl shadow-sm overflow-hidden animate-fade-in">
               <div className="p-6 border-b border-slate-100">
@@ -806,7 +796,7 @@ const AdminPanel = ({ onBackToStore }) => {
               </div>
           </div>
         )}
-
+        
         {activeTab === 'orders' && (
           <div className="space-y-4 animate-fade-in">
               {orders.length === 0 && (
@@ -814,6 +804,7 @@ const AdminPanel = ({ onBackToStore }) => {
               )}
             {orders.map((order) => (
               <div key={order.id} className="bg-white p-6 rounded-2xl shadow-sm border-l-4 border-amber-500 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 transition-all hover:shadow-md">
+                {/* ... (Existing order display code) ... */}
                 <div className="flex-1">
                   <div className="flex justify-between items-start mb-2">
                       <div>
@@ -884,8 +875,204 @@ const AdminPanel = ({ onBackToStore }) => {
   );
 };
 
+// --- Nouveau Composant CartDrawer (SÉPARÉ) ---
+const CartDrawer = ({ isOpen, onClose, cart, removeFromCart, user }) => {
+  const [formData, setFormData] = useState({ name: '', phone: '', wilaya: '', commune: '' });
+  const [orderComplete, setOrderComplete] = useState(false);
+  const [deliveryType, setDeliveryType] = useState('home');
+  const [deliveryFees, setDeliveryFees] = useState({});
+  const [showCheckout, setShowCheckout] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    const feesRef = collection(db, 'artifacts', appId, 'public', 'data', 'delivery_fees');
+    const unsubscribeFees = onSnapshot(feesRef, (snapshot) => {
+      const feesMap = {};
+      snapshot.docs.forEach(doc => {
+        feesMap[doc.id] = doc.data();
+      });
+      setDeliveryFees(feesMap);
+    });
+    return () => unsubscribeFees();
+  }, [user]);
+
+  const subtotal = cart.reduce((sum, item) => sum + item.price, 0);
+  const currentWilayaFees = (formData.wilaya && deliveryFees[formData.wilaya]) 
+                            ? deliveryFees[formData.wilaya] 
+                            : {}; 
+  const homePrice = currentWilayaFees.home !== undefined ? currentWilayaFees.home : 800;
+  const deskPrice = currentWilayaFees.desk !== undefined ? currentWilayaFees.desk : 400;
+  const deliveryPrice = deliveryType === 'home' ? homePrice : deskPrice;
+  const total = subtotal + deliveryPrice;
+
+  const handleOrder = async () => {
+    if (!formData.name || !formData.phone || !formData.wilaya || !formData.commune) {
+      alert("Veuillez remplir tous les champs.");
+      return;
+    }
+    
+    if (!user) {
+        alert("Erreur d'authentification. Veuillez rafraîchir la page.");
+        return;
+    }
+
+    try {
+      const ordersRef = collection(db, 'artifacts', appId, 'public', 'data', 'orders');
+      
+      const orderItems = cart.map(c => ({
+        name: c.name,
+        selectedSize: c.selectedSize || null,
+        selectedColor: c.selectedColor || null,
+        image: (c.images && c.images.length > 0) ? c.images[0] : (c.image || c.img),
+        price: c.price
+      }));
+
+      await addDoc(ordersRef, {
+        customerName: formData.name,
+        customerPhone: formData.phone,
+        customerWilaya: formData.wilaya,
+        customerCommune: formData.commune,
+        deliveryType: deliveryType, 
+        deliveryPrice: deliveryPrice,
+        itemsCount: cart.length,
+        subtotal: subtotal,
+        total: total,
+        status: 'pending',
+        items: orderItems,
+        createdAt: new Date().toISOString()
+      });
+      setOrderComplete(true);
+    } catch (e) {
+      console.error(e);
+      alert("Erreur lors de l'envoi de la commande. Vérifiez votre connexion.");
+    }
+  };
+
+  return (
+    <div className={`fixed inset-0 z-[100] transition-all duration-500 ${isOpen ? 'visible opacity-100' : 'invisible opacity-0'}`}>
+        <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose}></div>
+        <div className={`absolute right-0 top-0 h-full w-full md:w-[450px] bg-white shadow-2xl flex flex-col transition-transform duration-500 ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+          <div className="p-8 flex justify-between items-center border-b border-gray-100">
+            <h2 className="logo-font text-3xl italic">Votre Sélection</h2>
+            <button onClick={onClose} className="hover:rotate-90 transition duration-500"><X className="text-gray-400" strokeWidth={1} /></button>
+          </div>
+
+          <div className="flex-grow p-8 overflow-y-auto space-y-8 no-scrollbar">
+            {cart.length === 0 ? (
+               <div className="h-full flex flex-col items-center justify-center text-gray-300">
+                  <ShoppingBag size={48} strokeWidth={1} className="mb-4" />
+                  <p className="italic font-light">Le panier est vide.</p>
+               </div>
+            ) : (
+               cart.map((item, i) => {
+                  const itemImg = (item.images && item.images.length > 0) ? item.images[0] : (item.image || item.img);
+                  return (
+                  <div key={i} className="flex justify-between items-center slide-in" style={{animationDelay: `${i * 0.1}s`}}>
+                    <div className="flex items-center gap-4">
+                      <div className="w-16 h-20 bg-gray-100 overflow-hidden">
+                          <img src={itemImg} className="w-full h-full object-cover" alt={item.name} />
+                      </div>
+                      <div>
+                          <p className="text-[10px] font-bold uppercase tracking-widest mb-1">{item.name}</p>
+                          <p className="text-xs text-[#c4a47c]">{item.price.toLocaleString()} DZD</p>
+                          {item.selectedSize && <p className="text-[10px] text-gray-500 mt-1">Taille: {item.selectedSize}</p>}
+                          {item.selectedColor && <p className="text-[10px] text-gray-500 mt-1">Couleur: {item.selectedColor}</p>}
+                      </div>
+                    </div>
+                    <button onClick={() => removeFromCart(i)} className="text-gray-300 hover:text-red-500 transition"><Trash2 size={16} /></button>
+                  </div>
+              )
+            }))}
+          </div>
+
+          <div className="p-8 bg-gray-50 space-y-6 border-t border-gray-100">
+             {cart.length > 0 && (
+              <div className="space-y-2 border-b border-gray-200 pb-4">
+                <div className="flex justify-between text-xs text-gray-400">
+                  <span>Sous-total</span>
+                  <span>{subtotal.toLocaleString()} DZD</span>
+                </div>
+                <div className="flex justify-between text-xs text-gray-400">
+                  <span>Livraison ({deliveryType === 'home' ? 'Domicile' : 'Bureau'})</span>
+                  <span>{deliveryPrice.toLocaleString()} DZD</span>
+                </div>
+                <div className="flex justify-between items-end pt-2">
+                  <span className="text-xs uppercase font-bold text-gray-400">Total</span>
+                  <span className="text-3xl font-bold tracking-tighter logo-font">{total.toLocaleString()} <span className="text-sm font-sans font-normal text-gray-500">DZD</span></span>
+                </div>
+              </div>
+             )}
+
+            {showCheckout && !orderComplete && (
+              <div className="space-y-3 pt-2 animate-[slideUp_0.4s_ease-out]">
+                <input placeholder="NOM COMPLET" className="w-full bg-white border border-gray-200 p-4 text-[11px] font-bold tracking-widest outline-none focus:border-[#c4a47c] transition" onChange={e => setFormData({...formData, name: e.target.value})} />
+                <input placeholder="TÉLÉPHONE" className="w-full bg-white border border-gray-200 p-4 text-[11px] font-bold tracking-widest outline-none focus:border-[#c4a47c] transition" onChange={e => setFormData({...formData, phone: e.target.value})} />
+                <div className="grid grid-cols-2 gap-3">
+                    <select 
+                      className="w-full bg-white border border-gray-200 p-4 text-[11px] font-bold tracking-widest outline-none focus:border-[#c4a47c] transition"
+                      value={formData.wilaya}
+                      onChange={e => setFormData({...formData, wilaya: e.target.value})}
+                    >
+                      <option value="">SÉLECTIONNER WILAYA</option>
+                      {WILAYAS.map(w => (
+                        <option key={w} value={w}>{w}</option>
+                      ))}
+                    </select>
+                    
+                  <input placeholder="COMMUNE" className="w-full bg-white border border-gray-200 p-4 text-[11px] font-bold tracking-widest outline-none focus:border-[#c4a47c] transition" onChange={e => setFormData({...formData, commune: e.target.value})} />
+                </div>
+                
+                <div className="grid grid-cols-2 gap-3 mt-2">
+                  <button 
+                    className={`p-3 border rounded-lg text-[10px] font-bold uppercase tracking-wide transition-all ${deliveryType === 'desk' ? 'border-[#c4a47c] bg-amber-50 text-[#c4a47c]' : 'border-gray-200 text-gray-400 hover:border-gray-300'}`}
+                    onClick={() => setDeliveryType('desk')}
+                  >
+                    Bureau (Stop Desk)<br/>
+                    {formData.wilaya ? (
+                       <span className="text-xs">+{deskPrice} DZD</span>
+                    ) : (
+                       <span className="text-xs text-gray-300">Sélectionnez Wilaya</span>
+                    )}
+                  </button>
+                  <button 
+                    className={`p-3 border rounded-lg text-[10px] font-bold uppercase tracking-wide transition-all ${deliveryType === 'home' ? 'border-[#c4a47c] bg-amber-50 text-[#c4a47c]' : 'border-gray-200 text-gray-400 hover:border-gray-300'}`}
+                    onClick={() => setDeliveryType('home')}
+                  >
+                    À Domicile<br/>
+                    {formData.wilaya ? (
+                       <span className="text-xs">+{homePrice} DZD</span>
+                    ) : (
+                       <span className="text-xs text-gray-300">Sélectionnez Wilaya</span>
+                    )}
+                  </button>
+                </div>
+
+                <button onClick={handleOrder} className="w-full bg-[#1a1a1a] text-white py-5 text-[10px] font-bold uppercase tracking-widest hover:bg-[#c4a47c] transition duration-300 mt-2">Confirmer l'Achat</button>
+              </div>
+            )}
+
+            {!showCheckout && cart.length > 0 && (
+              <button onClick={() => setShowCheckout(true)} className="w-full bg-[#1a1a1a] text-white py-5 text-[10px] font-bold uppercase tracking-widest hover:bg-[#c4a47c] transition duration-300">Commander</button>
+            )}
+
+            {orderComplete && (
+              <div className="text-center p-6 bg-white border border-green-100 rounded-xl shadow-sm">
+                <div className="w-12 h-12 bg-green-50 text-green-500 rounded-full flex items-center justify-center mx-auto mb-3">
+                   <CheckCircle size={24} />
+                </div>
+                <p className="text-green-800 font-bold mb-2 uppercase text-xs tracking-widest">Commande Envoyée !</p>
+                <p className="text-xs text-gray-500">Nous vous contacterons sur votre numéro.</p>
+                <button onClick={() => {setOrderComplete(false); onClose(); setShowCheckout(false)}} className="mt-4 text-[10px] font-bold underline hover:text-[#c4a47c]">FERMER</button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+  );
+};
+
 // --- 3. Composant ProductDetails (State-based Navigation) ---
-const ProductDetails = ({ productId, onBack, onAddToCart }) => {
+const ProductDetails = ({ productId, onBack, onAddToCart, onOpenCart }) => {
   const [product, setProduct] = useState(null);
   const [selectedSize, setSelectedSize] = useState(null);
   const [selectedColor, setSelectedColor] = useState(null);
@@ -941,7 +1128,8 @@ const ProductDetails = ({ productId, onBack, onAddToCart }) => {
         selectedColor,
         image: activeImage 
     });
-    alert("Produit ajouté au panier !");
+    // Removed alert, now opens cart
+    onOpenCart();
   };
 
   if (!product) {
@@ -1056,44 +1244,17 @@ const ProductDetails = ({ productId, onBack, onAddToCart }) => {
 };
 
 // --- Composant Store Front ---
-const StoreFront = ({ onAdminClick, onProductClick, cart, addToCart, removeFromCart }) => {
-  const [isCartOpen, setIsCartOpen] = useState(false);
-  const [showCheckout, setShowCheckout] = useState(false);
-  const [formData, setFormData] = useState({ name: '', phone: '', wilaya: '', commune: '' });
-  const [orderComplete, setOrderComplete] = useState(false);
-  const [deliveryType, setDeliveryType] = useState('home');
-  const [deliveryFees, setDeliveryFees] = useState({});
+const StoreFront = ({ onAdminClick, onProductClick, cart, addToCart, onOpenCart, user }) => {
+  // Removed local Cart state and logic, now handled by App and CartDrawer
   const [selectedCategory, setSelectedCategory] = useState('Tout');
-  
   const [products, setProducts] = useState([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
-  const [user, setUser] = useState(null); 
   
   const defaultProducts = [
     { id: 'def1', name: 'Pantalon Chino Signature', price: 6500, image: 'https://images.unsplash.com/photo-1541099649105-f69ad21f3246?q=80&w=600', category: 'Pantalon' },
     { id: 'def2', name: 'Chemise Slim Oxford', price: 4800, image: 'https://images.unsplash.com/photo-1589310243389-96a5483213a8?q=80&w=600', category: 'Chemise' },
     { id: 'def3', name: 'Manteau Laine & Cachemire', price: 24000, image: 'https://images.unsplash.com/photo-1539533113208-f6df8cc8b543?q=80&w=600', category: 'Manteau' }
   ];
-
-  useEffect(() => {
-    const initAuth = async () => {
-       try {
-         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-            await signInWithCustomToken(auth, __initial_auth_token);
-          } else {
-            await signInAnonymously(auth);
-          }
-       } catch (err) {
-         console.error("Auth failed", err);
-       }
-    }
-    initAuth();
-    
-    const unsubscribeAuth = onAuthStateChanged(auth, (u) => {
-        setUser(u);
-    });
-    return () => unsubscribeAuth();
-  }, []);
 
   useEffect(() => {
     if (!user) return; 
@@ -1108,19 +1269,7 @@ const StoreFront = ({ onAdminClick, onProductClick, cart, addToCart, removeFromC
        setLoadingProducts(false);
     });
 
-    const feesRef = collection(db, 'artifacts', appId, 'public', 'data', 'delivery_fees');
-    const unsubscribeFees = onSnapshot(feesRef, (snapshot) => {
-      const feesMap = {};
-      snapshot.docs.forEach(doc => {
-        feesMap[doc.id] = doc.data();
-      });
-      setDeliveryFees(feesMap);
-    });
-
-    return () => {
-      unsubscribe();
-      unsubscribeFees();
-    };
+    return () => unsubscribe();
   }, [user]);
 
   const allProducts = products.length > 0 ? products : defaultProducts;
@@ -1135,61 +1284,7 @@ const StoreFront = ({ onAdminClick, onProductClick, cart, addToCart, removeFromC
 
   const handleQuickAdd = (product) => {
     addToCart(product); 
-    setIsCartOpen(true);
-  };
-  
-  const subtotal = cart.reduce((sum, item) => sum + item.price, 0);
-  
-  const currentWilayaFees = (formData.wilaya && deliveryFees[formData.wilaya]) 
-                            ? deliveryFees[formData.wilaya] 
-                            : {}; 
-  const homePrice = currentWilayaFees.home !== undefined ? currentWilayaFees.home : 800;
-  const deskPrice = currentWilayaFees.desk !== undefined ? currentWilayaFees.desk : 400;
-                            
-  const deliveryPrice = deliveryType === 'home' ? homePrice : deskPrice;
-  const total = subtotal + deliveryPrice;
-
-  const handleOrder = async () => {
-    if (!formData.name || !formData.phone || !formData.wilaya || !formData.commune) {
-      alert("Veuillez remplir tous les champs.");
-      return;
-    }
-    
-    if (!user) {
-        alert("Erreur d'authentification. Veuillez rafraîchir la page.");
-        return;
-    }
-
-    try {
-      const ordersRef = collection(db, 'artifacts', appId, 'public', 'data', 'orders');
-      
-      const orderItems = cart.map(c => ({
-        name: c.name,
-        selectedSize: c.selectedSize || null,
-        selectedColor: c.selectedColor || null,
-        image: (c.images && c.images.length > 0) ? c.images[0] : (c.image || c.img),
-        price: c.price
-      }));
-
-      await addDoc(ordersRef, {
-        customerName: formData.name,
-        customerPhone: formData.phone,
-        customerWilaya: formData.wilaya,
-        customerCommune: formData.commune,
-        deliveryType: deliveryType, 
-        deliveryPrice: deliveryPrice,
-        itemsCount: cart.length,
-        subtotal: subtotal,
-        total: total,
-        status: 'pending',
-        items: orderItems,
-        createdAt: new Date().toISOString()
-      });
-      setOrderComplete(true);
-    } catch (e) {
-      console.error(e);
-      alert("Erreur lors de l'envoi de la commande. Vérifiez votre connexion.");
-    }
+    onOpenCart();
   };
 
   return (
@@ -1205,7 +1300,7 @@ const StoreFront = ({ onAdminClick, onProductClick, cart, addToCart, removeFromC
 
           <div className="flex items-center space-x-4">
             <button onClick={onAdminClick} className="text-[10px] font-bold tracking-[0.2em] uppercase border border-black px-4 py-2 hover:bg-black hover:text-white transition duration-300">Admin</button>
-            <button onClick={() => setIsCartOpen(true)} className="relative p-2 hover:text-[#c4a47c] transition">
+            <button onClick={onOpenCart} className="relative p-2 hover:text-[#c4a47c] transition">
               <ShoppingBag size={24} strokeWidth={1.5} />
               {cart.length > 0 && <span className="absolute -top-1 -right-1 bg-black text-white text-[9px] w-4 h-4 flex items-center justify-center rounded-full font-bold">{cart.length}</span>}
             </button>
@@ -1315,126 +1410,6 @@ const StoreFront = ({ onAdminClick, onProductClick, cart, addToCart, removeFromC
            © 2024 Élégance Boutique. Tous droits réservés.
         </div>
       </footer>
-
-      <div className={`fixed inset-0 z-[100] transition-all duration-500 ${isCartOpen ? 'visible opacity-100' : 'invisible opacity-0'}`}>
-        <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setIsCartOpen(false)}></div>
-        <div className={`absolute right-0 top-0 h-full w-full md:w-[450px] bg-white shadow-2xl flex flex-col transition-transform duration-500 ${isCartOpen ? 'translate-x-0' : 'translate-x-full'}`}>
-          <div className="p-8 flex justify-between items-center border-b border-gray-100">
-            <h2 className="logo-font text-3xl italic">Votre Sélection</h2>
-            <button onClick={() => setIsCartOpen(false)} className="hover:rotate-90 transition duration-500"><X className="text-gray-400" strokeWidth={1} /></button>
-          </div>
-
-          <div className="flex-grow p-8 overflow-y-auto space-y-8 no-scrollbar">
-            {cart.length === 0 ? (
-               <div className="h-full flex flex-col items-center justify-center text-gray-300">
-                  <ShoppingBag size={48} strokeWidth={1} className="mb-4" />
-                  <p className="italic font-light">Le panier est vide.</p>
-               </div>
-            ) : (
-               cart.map((item, i) => {
-                  const itemImg = (item.images && item.images.length > 0) ? item.images[0] : (item.image || item.img);
-                  return (
-                  <div key={i} className="flex justify-between items-center slide-in" style={{animationDelay: `${i * 0.1}s`}}>
-                    <div className="flex items-center gap-4">
-                      <div className="w-16 h-20 bg-gray-100 overflow-hidden">
-                          <img src={itemImg} className="w-full h-full object-cover" alt={item.name} />
-                      </div>
-                      <div>
-                          <p className="text-[10px] font-bold uppercase tracking-widest mb-1">{item.name}</p>
-                          <p className="text-xs text-[#c4a47c]">{item.price.toLocaleString()} DZD</p>
-                          {item.selectedSize && <p className="text-[10px] text-gray-500 mt-1">Taille: {item.selectedSize}</p>}
-                          {item.selectedColor && <p className="text-[10px] text-gray-500 mt-1">Couleur: {item.selectedColor}</p>}
-                      </div>
-                    </div>
-                    <button onClick={() => removeFromCart(i)} className="text-gray-300 hover:text-red-500 transition"><Trash2 size={16} /></button>
-                  </div>
-              )
-            }))}
-          </div>
-
-          <div className="p-8 bg-gray-50 space-y-6 border-t border-gray-100">
-             {cart.length > 0 && (
-              <div className="space-y-2 border-b border-gray-200 pb-4">
-                <div className="flex justify-between text-xs text-gray-400">
-                  <span>Sous-total</span>
-                  <span>{subtotal.toLocaleString()} DZD</span>
-                </div>
-                <div className="flex justify-between text-xs text-gray-400">
-                  <span>Livraison ({deliveryType === 'home' ? 'Domicile' : 'Bureau'})</span>
-                  <span>{deliveryPrice.toLocaleString()} DZD</span>
-                </div>
-                <div className="flex justify-between items-end pt-2">
-                  <span className="text-xs uppercase font-bold text-gray-400">Total</span>
-                  <span className="text-3xl font-bold tracking-tighter logo-font">{total.toLocaleString()} <span className="text-sm font-sans font-normal text-gray-500">DZD</span></span>
-                </div>
-              </div>
-             )}
-
-            {showCheckout && !orderComplete && (
-              <div className="space-y-3 pt-2 animate-[slideUp_0.4s_ease-out]">
-                <input placeholder="NOM COMPLET" className="w-full bg-white border border-gray-200 p-4 text-[11px] font-bold tracking-widest outline-none focus:border-[#c4a47c] transition" onChange={e => setFormData({...formData, name: e.target.value})} />
-                <input placeholder="TÉLÉPHONE" className="w-full bg-white border border-gray-200 p-4 text-[11px] font-bold tracking-widest outline-none focus:border-[#c4a47c] transition" onChange={e => setFormData({...formData, phone: e.target.value})} />
-                <div className="grid grid-cols-2 gap-3">
-                   <select 
-                     className="w-full bg-white border border-gray-200 p-4 text-[11px] font-bold tracking-widest outline-none focus:border-[#c4a47c] transition"
-                     value={formData.wilaya}
-                     onChange={e => setFormData({...formData, wilaya: e.target.value})}
-                   >
-                     <option value="">SÉLECTIONNER WILAYA</option>
-                     {WILAYAS.map(w => (
-                       <option key={w} value={w}>{w}</option>
-                     ))}
-                   </select>
-                   
-                  <input placeholder="COMMUNE" className="w-full bg-white border border-gray-200 p-4 text-[11px] font-bold tracking-widest outline-none focus:border-[#c4a47c] transition" onChange={e => setFormData({...formData, commune: e.target.value})} />
-                </div>
-                
-                <div className="grid grid-cols-2 gap-3 mt-2">
-                  <button 
-                    className={`p-3 border rounded-lg text-[10px] font-bold uppercase tracking-wide transition-all ${deliveryType === 'desk' ? 'border-[#c4a47c] bg-amber-50 text-[#c4a47c]' : 'border-gray-200 text-gray-400 hover:border-gray-300'}`}
-                    onClick={() => setDeliveryType('desk')}
-                  >
-                    Bureau (Stop Desk)<br/>
-                    {formData.wilaya ? (
-                       <span className="text-xs">+{deskPrice} DZD</span>
-                    ) : (
-                       <span className="text-xs text-gray-300">Sélectionnez Wilaya</span>
-                    )}
-                  </button>
-                  <button 
-                    className={`p-3 border rounded-lg text-[10px] font-bold uppercase tracking-wide transition-all ${deliveryType === 'home' ? 'border-[#c4a47c] bg-amber-50 text-[#c4a47c]' : 'border-gray-200 text-gray-400 hover:border-gray-300'}`}
-                    onClick={() => setDeliveryType('home')}
-                  >
-                    À Domicile<br/>
-                    {formData.wilaya ? (
-                       <span className="text-xs">+{homePrice} DZD</span>
-                    ) : (
-                       <span className="text-xs text-gray-300">Sélectionnez Wilaya</span>
-                    )}
-                  </button>
-                </div>
-
-                <button onClick={handleOrder} className="w-full bg-[#1a1a1a] text-white py-5 text-[10px] font-bold uppercase tracking-widest hover:bg-[#c4a47c] transition duration-300 mt-2">Confirmer l'Achat</button>
-              </div>
-            )}
-
-            {!showCheckout && cart.length > 0 && (
-              <button onClick={() => setShowCheckout(true)} className="w-full bg-[#1a1a1a] text-white py-5 text-[10px] font-bold uppercase tracking-widest hover:bg-[#c4a47c] transition duration-300">Commander</button>
-            )}
-
-            {orderComplete && (
-              <div className="text-center p-6 bg-white border border-green-100 rounded-xl shadow-sm">
-                <div className="w-12 h-12 bg-green-50 text-green-500 rounded-full flex items-center justify-center mx-auto mb-3">
-                   <CheckCircle size={24} />
-                </div>
-                <p className="text-green-800 font-bold mb-2 uppercase text-xs tracking-widest">Commande Envoyée !</p>
-                <p className="text-xs text-gray-500">Nous vous contacterons sur votre numéro.</p>
-                <button onClick={() => {setOrderComplete(false); setIsCartOpen(false); setShowCheckout(false)}} className="mt-4 text-[10px] font-bold underline hover:text-[#c4a47c]">FERMER</button>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
       <GlobalStyles />
     </div>
   );
@@ -1443,16 +1418,84 @@ const StoreFront = ({ onAdminClick, onProductClick, cart, addToCart, removeFromC
 // --- App Racine ---
 const App = () => {
   const [cart, setCart] = useState([]);
-  const [currentView, setCurrentView] = useState('store'); // 'store', 'admin', 'details'
-  const [selectedProductId, setSelectedProductId] = useState(null);
+  const [isCartOpen, setIsCartOpen] = useState(false);
+  const [user, setUser] = useState(null);
+  
+  // Helper: Retrieve initial state from URL hash
+  const getInitialState = () => {
+      try {
+          const hash = window.location.hash.replace('#', '');
+          const parts = hash.split('/');
+          const view = parts[0];
+          const param = parts[1];
+          
+          if (view === 'admin') return { view: 'admin', param: null };
+          if (view === 'details' && param) return { view: 'details', param: param };
+          return { view: 'store', param: null };
+      } catch (e) {
+          return { view: 'store', param: null };
+      }
+  };
+
+  const initialState = getInitialState();
+  const [currentView, setCurrentView] = useState(initialState.view);
+  const [selectedProductId, setSelectedProductId] = useState(initialState.param);
 
   useEffect(() => {
+    // Tailwind Script Injection
     if (!document.getElementById('tailwind-script')) {
       const script = document.createElement('script');
       script.id = 'tailwind-script';
       script.src = "https://cdn.tailwindcss.com";
       document.head.appendChild(script);
     }
+
+    // Hash Change Listener
+    const handleHashChange = () => {
+        const hash = window.location.hash.replace('#', '');
+        const parts = hash.split('/');
+        const view = parts[0];
+        const param = parts[1];
+
+        if (view === 'admin') {
+            setCurrentView('admin');
+            setSelectedProductId(null);
+        } else if (view === 'details' && param) {
+            setCurrentView('details');
+            setSelectedProductId(param);
+        } else {
+            setCurrentView('store');
+            setSelectedProductId(null);
+        }
+        window.scrollTo(0, 0);
+    };
+
+    window.addEventListener('hashchange', handleHashChange);
+    
+    // Set default hash if empty
+    if (!window.location.hash) {
+        window.location.hash = 'store';
+    }
+
+    // Init Auth for App
+    const initAuth = async () => {
+       try {
+         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+            await signInWithCustomToken(auth, __initial_auth_token);
+          } else {
+            await signInAnonymously(auth);
+          }
+       } catch (err) {
+         console.error("Auth failed", err);
+       }
+    }
+    initAuth();
+    const unsubscribeAuth = onAuthStateChanged(auth, setUser);
+
+    return () => {
+      window.removeEventListener('hashchange', handleHashChange);
+      unsubscribeAuth();
+    };
   }, []);
 
   const addToCart = (product) => {
@@ -1463,19 +1506,17 @@ const App = () => {
     setCart(cart.filter((_, index) => index !== indexToRemove));
   };
 
+  // --- Router Navigation Functions ---
   const navigateToProduct = (id) => {
-      setSelectedProductId(id);
-      setCurrentView('details');
-      window.scrollTo(0, 0);
+      window.location.hash = `details/${id}`;
   };
 
   const navigateToStore = () => {
-      setCurrentView('store');
-      setSelectedProductId(null);
+      window.location.hash = 'store';
   };
 
   const navigateToAdmin = () => {
-      setCurrentView('admin');
+      window.location.hash = 'admin';
   };
 
   return (
@@ -1486,7 +1527,8 @@ const App = () => {
             onProductClick={navigateToProduct}
             cart={cart}
             addToCart={addToCart}
-            removeFromCart={removeFromCart}
+            onOpenCart={() => setIsCartOpen(true)}
+            user={user}
         />
       )}
       {currentView === 'details' && (
@@ -1494,6 +1536,7 @@ const App = () => {
             productId={selectedProductId}
             onBack={navigateToStore}
             onAddToCart={addToCart}
+            onOpenCart={() => setIsCartOpen(true)}
           />
       )}
       {currentView === 'admin' && (
@@ -1501,6 +1544,15 @@ const App = () => {
             onBackToStore={navigateToStore} 
           />
       )}
+
+      {/* Cart Drawer is now Global */}
+      <CartDrawer 
+        isOpen={isCartOpen} 
+        onClose={() => setIsCartOpen(false)} 
+        cart={cart} 
+        removeFromCart={removeFromCart}
+        user={user}
+      />
     </>
   );
 };
