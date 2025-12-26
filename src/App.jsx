@@ -1,4 +1,3 @@
-// Update Router Configuration & Add 'Tricot' Category & Add Communes
 /* global __firebase_config, __app_id, __initial_auth_token */
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
@@ -1530,7 +1529,7 @@ const StoreFront = ({ onAdminClick, onProductClick, cart, addToCart, onOpenCart,
             <h4 className="text-xs font-bold uppercase tracking-[0.3em] mb-8 text-[#c4a47c]">Contact</h4>
             <div className="space-y-4 text-sm font-light text-gray-400">
               <p className="flex items-center gap-3 hover:text-white transition"><Phone size={14} /> 0559312724</p>
-              <p className="flex items-center gap-3 hover:text-white transition"><MapPin size={14} /> Hydra, Alger, Algérie</p>
+              <p className="flex items-center gap-3 hover:text-white transition"><MapPin size={14} /> Les Tours, Sétif, Algeria</p>
             </div>
           </div>
           <div>
@@ -1617,9 +1616,9 @@ const App = () => {
     const initAuth = async () => {
        try {
          if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-            await signInWithCustomToken(auth, __initial_auth_token);
+           await signInWithCustomToken(auth, __initial_auth_token);
           } else {
-            await signInAnonymously(auth);
+           await signInAnonymously(auth);
           }
        } catch (err) {
          console.error("Auth failed", err);
@@ -1662,13 +1661,13 @@ const App = () => {
     <>
       {currentView === 'store' && (
         <StoreFront 
-            onAdminClick={navigateToAdmin} 
-            onProductClick={navigateToProduct}
-            cart={cart}
-            addToCart={addToCart}
-            removeFromCart={removeFromCart}
-            onOpenCart={() => setIsCartOpen(true)}
-            user={user}
+           onAdminClick={navigateToAdmin} 
+           onProductClick={navigateToProduct}
+           cart={cart}
+           addToCart={addToCart}
+           removeFromCart={removeFromCart}
+           onOpenCart={() => setIsCartOpen(true)}
+           user={user}
         />
       )}
       {currentView === 'details' && (
