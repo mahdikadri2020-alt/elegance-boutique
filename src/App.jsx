@@ -17,6 +17,7 @@ import {
 } from 'firebase/auth';
 
 // --- Configuration Firebase ---
+// Uses global config if available (in the preview environment), otherwise falls back to the provided config
 const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
   apiKey: "AIzaSyAlWIMQPdg9F48Q2r6M3Xxv3pJq08Hk8ps",
   authDomain: "elegance-boutique-38d2b.firebaseapp.com",
@@ -503,7 +504,6 @@ const AdminPanel = ({ onBackToStore }) => {
       </aside>
 
       <main className="flex-1 overflow-y-auto p-4 md:p-10 relative">
-        {/* ... (Existing Admin Panel Content remains unchanged) ... */}
         <header className="flex justify-between items-center mb-8 bg-white p-6 rounded-2xl shadow-sm">
           <div>
             <h2 className="text-2xl font-bold text-slate-800">
@@ -834,7 +834,7 @@ const AdminPanel = ({ onBackToStore }) => {
           </div>
         )}
 
-        {/* ... (Delivery and Orders tabs remain unchanged) ... */}
+        {/* ... (Delivery and Orders tabs) ... */}
         {activeTab === 'delivery' && (
           <div className="bg-white rounded-2xl shadow-sm overflow-hidden animate-fade-in">
               <div className="p-6 border-b border-slate-100">
@@ -909,7 +909,6 @@ const AdminPanel = ({ onBackToStore }) => {
               )}
             {orders.map((order) => (
               <div key={order.id} className="bg-white p-6 rounded-2xl shadow-sm border-l-4 border-amber-500 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 transition-all hover:shadow-md">
-                {/* ... (Existing order display code) ... */}
                 <div className="flex-1">
                   <div className="flex justify-between items-start mb-2">
                       <div>
@@ -1124,8 +1123,19 @@ const CartDrawer = ({ isOpen, onClose, cart, removeFromCart, user }) => {
 
             {showCheckout && !orderComplete && (
               <div className="space-y-3 pt-2 animate-[slideUp_0.4s_ease-out]">
-                <input placeholder="NOM COMPLET" className="w-full bg-white border border-gray-200 p-4 text-[11px] font-bold tracking-widest outline-none focus:border-[#c4a47c] transition" onChange={e => setFormData({...formData, name: e.target.value})} />
-                <input placeholder="TÉLÉPHONE (05/06/07...)" className="w-full bg-white border border-gray-200 p-4 text-[11px] font-bold tracking-widest outline-none focus:border-[#c4a47c] transition" onChange={e => setFormData({...formData, phone: e.target.value})} />
+                <input 
+                  value={formData.name}
+                  placeholder="NOM COMPLET" 
+                  className="w-full bg-white border border-gray-200 p-4 text-[11px] font-bold tracking-widest outline-none focus:border-[#c4a47c] transition" 
+                  onChange={e => setFormData({...formData, name: e.target.value})} 
+                />
+                <input 
+                  type="tel"
+                  value={formData.phone}
+                  placeholder="TÉLÉPHONE (05/06/07...)" 
+                  className="w-full bg-white border border-gray-200 p-4 text-[11px] font-bold tracking-widest outline-none focus:border-[#c4a47c] transition" 
+                  onChange={e => setFormData({...formData, phone: e.target.value.replace(/[^0-9]/g, '')})} 
+                />
                 <div className="grid grid-cols-2 gap-3">
                     <select 
                       className="w-full bg-white border border-gray-200 p-4 text-[11px] font-bold tracking-widest outline-none focus:border-[#c4a47c] transition"
