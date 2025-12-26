@@ -910,6 +910,13 @@ const CartDrawer = ({ isOpen, onClose, cart, removeFromCart, user }) => {
       alert("Veuillez remplir tous les champs.");
       return;
     }
+
+    // New validation logic
+    const phoneRegex = /^(05|06|07)[0-9]{8}$/;
+    if (!phoneRegex.test(formData.phone)) {
+        alert("Le numéro de téléphone doit être au format (05XXXXXXXX, 06XXXXXXXX, 07XXXXXXXX).");
+        return;
+    }
     
     if (!user) {
         alert("Erreur d'authentification. Veuillez rafraîchir la page.");
@@ -1006,7 +1013,7 @@ const CartDrawer = ({ isOpen, onClose, cart, removeFromCart, user }) => {
             {showCheckout && !orderComplete && (
               <div className="space-y-3 pt-2 animate-[slideUp_0.4s_ease-out]">
                 <input placeholder="NOM COMPLET" className="w-full bg-white border border-gray-200 p-4 text-[11px] font-bold tracking-widest outline-none focus:border-[#c4a47c] transition" onChange={e => setFormData({...formData, name: e.target.value})} />
-                <input placeholder="TÉLÉPHONE" className="w-full bg-white border border-gray-200 p-4 text-[11px] font-bold tracking-widest outline-none focus:border-[#c4a47c] transition" onChange={e => setFormData({...formData, phone: e.target.value})} />
+                <input placeholder="TÉLÉPHONE (05/06/07...)" className="w-full bg-white border border-gray-200 p-4 text-[11px] font-bold tracking-widest outline-none focus:border-[#c4a47c] transition" onChange={e => setFormData({...formData, phone: e.target.value})} />
                 <div className="grid grid-cols-2 gap-3">
                     <select 
                       className="w-full bg-white border border-gray-200 p-4 text-[11px] font-bold tracking-widest outline-none focus:border-[#c4a47c] transition"
@@ -1418,8 +1425,6 @@ const StoreFront = ({ onAdminClick, onProductClick, cart, addToCart, onOpenCart,
 // --- App Racine ---
 const App = () => {
   const [cart, setCart] = useState([]);
-  const [isCartOpen, setIsCartOpen] = useState(false);
-  const [user, setUser] = useState(null);
   
   // Helper: Retrieve initial state from URL hash
   const getInitialState = () => {
@@ -1440,6 +1445,8 @@ const App = () => {
   const initialState = getInitialState();
   const [currentView, setCurrentView] = useState(initialState.view);
   const [selectedProductId, setSelectedProductId] = useState(initialState.param);
+  const [isCartOpen, setIsCartOpen] = useState(false);
+  const [user, setUser] = useState(null);
 
   useEffect(() => {
     // Tailwind Script Injection
@@ -1507,6 +1514,9 @@ const App = () => {
   };
 
   // --- Router Navigation Functions ---
+  // Instead of setting state directly, we update the hash.
+  // The useEffect listener picks this up and updates the state.
+  
   const navigateToProduct = (id) => {
       window.location.hash = `details/${id}`;
   };
@@ -1527,6 +1537,7 @@ const App = () => {
             onProductClick={navigateToProduct}
             cart={cart}
             addToCart={addToCart}
+            removeFromCart={removeFromCart}
             onOpenCart={() => setIsCartOpen(true)}
             user={user}
         />
