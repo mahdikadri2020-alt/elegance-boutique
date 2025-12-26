@@ -1,4 +1,4 @@
-// Update Router Configuration
+// Update Router Configuration & Add 'Tricot' Category
 /* global __firebase_config, __app_id, __initial_auth_token */
 import React, { useState, useEffect } from 'react';
 import { 
@@ -547,6 +547,7 @@ const AdminPanel = ({ onBackToStore }) => {
                     <option>Accessoires</option>
                     <option>Manteaux</option>
                     <option>Pantalon</option>
+                    <option>Tricot</option>
                   </select>
                 </div>
                 
@@ -665,7 +666,7 @@ const AdminPanel = ({ onBackToStore }) => {
                 <div><label className="text-sm font-bold text-slate-700">Nom du produit</label><input required className="w-full mt-2 p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none transition-all" value={newProduct.name} onChange={(e) => setNewProduct({...newProduct, name: e.target.value})} /></div>
                 <div><label className="text-sm font-bold text-slate-700">Prix (DZD)</label><input required type="number" className="w-full mt-2 p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none transition-all" value={newProduct.price} onChange={(e) => setNewProduct({...newProduct, price: e.target.value})} /></div>
               </div>
-              <div><label className="text-sm font-bold text-slate-700">Catégorie</label><select className="w-full mt-2 p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none transition-all" value={newProduct.category} onChange={(e) => setNewProduct({...newProduct, category: e.target.value})}><option>Costumes</option><option>Chemises</option><option>Chaussures</option><option>Accessoires</option><option>Manteaux</option><option>Pantalon</option></select></div>
+              <div><label className="text-sm font-bold text-slate-700">Catégorie</label><select className="w-full mt-2 p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none transition-all" value={newProduct.category} onChange={(e) => setNewProduct({...newProduct, category: e.target.value})}><option>Costumes</option><option>Chemises</option><option>Chaussures</option><option>Accessoires</option><option>Manteaux</option><option>Pantalon</option><option>Tricot</option></select></div>
               
               {/* Size Select */}
               <div>
@@ -1340,7 +1341,8 @@ const StoreFront = ({ onAdminClick, onProductClick, cart, addToCart, onOpenCart,
 
   const allProducts = products.length > 0 ? products : defaultProducts;
   
-  const PREDEFINED_CATEGORIES = ['Costumes', 'Chaussures', 'Accessoires', 'Chemises', 'Manteaux', 'Pantalon'];
+  // Added 'Tricot' to categories
+  const PREDEFINED_CATEGORIES = ['Costumes', 'Chaussures', 'Accessoires', 'Chemises', 'Manteaux', 'Pantalon', 'Tricot'];
   const dynamicCategories = allProducts.map(p => p.category).filter(Boolean);
   const categories = ['Tout', ...new Set([...PREDEFINED_CATEGORIES, ...dynamicCategories])];
 
