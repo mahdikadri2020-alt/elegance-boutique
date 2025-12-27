@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Package, PlusCircle, ShoppingCart, Trash2, 
   TrendingUp, Users, Image as ImageIcon, CheckCircle, Lock, 
   Eye, EyeOff, LogOut, ShoppingBag, X, Phone, MapPin, Loader, UploadCloud, Edit, Plus,
-  ArrowLeft, ChevronRight, Star, Share2, Truck, Save, Map, Filter
+  ArrowLeft, ChevronRight, Star, Share2, Truck, Save, Map, Filter, SlidersHorizontal, ArrowUpDown
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -17,7 +17,6 @@ import {
 } from 'firebase/auth';
 
 // --- Configuration Firebase ---
-// Uses global config if available (in the preview environment), otherwise falls back to the provided config
 const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
   apiKey: "AIzaSyAlWIMQPdg9F48Q2r6M3Xxv3pJq08Hk8ps",
   authDomain: "elegance-boutique-38d2b.firebaseapp.com",
@@ -33,7 +32,14 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
-// --- Constants: Wilayas & Communes Data ---
+// --- Global Constants (Shared between Admin & Store) ---
+const CLOTHING_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL'];
+const SHOE_SIZES = [];
+for (let i = 35; i <= 45; i += 1) { // Simplified to integers for cleaner UI, or keep 0.5 if needed
+  SHOE_SIZES.push(i.toString());
+}
+const AVAILABLE_COLORS = ['Noir', 'Blanc', 'Bleu', 'Rouge', 'Vert', 'Jaune', 'Gris', 'Beige', 'Marron', 'Rose'];
+
 const ALGERIA_DATA = {
   "Adrar": ["Adrar", "Tamest", "Charouine", "Reggane", "In Zghmir", "Tit", "Ksar Kaddour", "Tsabit", "Timiaouine", "Zaouiet Kounta", "Aoulef", "Tamekten", "Tamantit", "Fenoughil", "Tinerkouk", "Deldoul", "Sali", "Akabli", "Metarfa", "Ouled Ahmed Tammi", "Bouda", "Aougrout", "Talmine", "Bordj Badji Mokhtar", "Sebbaa", "Ouled Aissa", "Timokten", "Timimoun"],
   "Chlef": ["Chlef", "Tenes", "Benairia", "El Karimia", "Tadjena", "Taougrite", "Beni Haoua", "Sobha", "Harchoun", "Ouled Fares", "Sidi Akkacha", "Boukadir", "Beni Rached", "Talassa", "Herenfa", "Oued Goussine", "Dahra", "Ouled Abbes", "Sendjas", "Zeboudja", "Oued Sly", "Abou El Hassan", "El Marsa", "Chettia", "Sidi Abderrahmane", "Moussadek", "El Hadjadj", "Labiod Medjadja", "Oued Fodda", "Ouled Ben Abdelkader", "Bouzghaia", "Sarthe", "Sidiakkacha", "Ain Merane", "Breira"],
@@ -172,13 +178,6 @@ const AdminPanel = ({ onBackToStore }) => {
     colors: [],
     colorImages: {} // New: Map color to image
   });
-
-  const CLOTHING_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL'];
-  const SHOE_SIZES = [];
-  for (let i = 35; i <= 45; i += 0.5) {
-    SHOE_SIZES.push(i.toString());
-  }
-  const AVAILABLE_COLORS = ['Noir', 'Blanc', 'Bleu', 'Rouge', 'Vert', 'Jaune', 'Gris', 'Beige', 'Marron', 'Rose'];
 
   // Auth Effect
   useEffect(() => {
@@ -979,7 +978,132 @@ const AdminPanel = ({ onBackToStore }) => {
   );
 };
 
-// --- Nouveau Composant CartDrawer (SÉPARÉ) ---
+// --- Composant Filter Drawer (NOUVEAU) ---
+const FilterDrawer = ({ isOpen, onClose, filters, setFilters, sortOption, setSortOption, resultsCount }) => {
+  const toggleFilter = (type, value) => {
+    setFilters(prev => {
+      const current = prev[type] || [];
+      const updated = current.includes(value)
+        ? current.filter(item => item !== value)
+        : [...current, value];
+      return { ...prev, [type]: updated };
+    });
+  };
+
+  const clearFilters = () => {
+    setFilters({ minPrice: '', maxPrice: '', sizes: [], colors: [] });
+    setSortOption('newest');
+  };
+
+  return (
+    <div className={`fixed inset-0 z-[100] transition-all duration-500 ${isOpen ? 'visible opacity-100' : 'invisible opacity-0'}`}>
+        <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose}></div>
+        <div className={`absolute right-0 top-0 h-full w-full md:w-[400px] bg-white shadow-2xl flex flex-col transition-transform duration-500 ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+          <div className="p-6 flex justify-between items-center border-b border-gray-100">
+            <h2 className="logo-font text-2xl italic">Filtrer & Trier</h2>
+            <button onClick={onClose} className="hover:rotate-90 transition duration-500"><X className="text-gray-400" strokeWidth={1} /></button>
+          </div>
+
+          <div className="flex-grow p-6 overflow-y-auto space-y-8 no-scrollbar">
+            
+            {/* Sort Section */}
+            <div className="space-y-4">
+               <h3 className="text-xs font-bold uppercase tracking-widest text-gray-500 flex items-center gap-2"><ArrowUpDown size={14}/> Trier par</h3>
+               <div className="grid grid-cols-1 gap-2">
+                 {[
+                   { id: 'newest', label: 'Nouveautés' },
+                   { id: 'price-asc', label: 'Prix croissant' },
+                   { id: 'price-desc', label: 'Prix décroissant' },
+                 ].map(opt => (
+                   <button
+                    key={opt.id}
+                    onClick={() => setSortOption(opt.id)}
+                    className={`text-left px-4 py-3 rounded-lg text-sm font-medium transition-all ${sortOption === opt.id ? 'bg-black text-white' : 'bg-gray-50 text-gray-600 hover:bg-gray-100'}`}
+                   >
+                     {opt.label}
+                   </button>
+                 ))}
+               </div>
+            </div>
+
+            <hr className="border-gray-100" />
+
+            {/* Price Section */}
+            <div className="space-y-4">
+              <h3 className="text-xs font-bold uppercase tracking-widest text-gray-500">Prix (DZD)</h3>
+              <div className="flex gap-4 items-center">
+                <input 
+                  type="number" 
+                  placeholder="Min" 
+                  value={filters.minPrice}
+                  onChange={(e) => setFilters({...filters, minPrice: e.target.value})}
+                  className="w-full bg-gray-50 border border-gray-200 p-3 rounded-lg text-sm outline-none focus:border-black transition-colors"
+                />
+                <span className="text-gray-400">-</span>
+                <input 
+                  type="number" 
+                  placeholder="Max" 
+                  value={filters.maxPrice}
+                  onChange={(e) => setFilters({...filters, maxPrice: e.target.value})}
+                  className="w-full bg-gray-50 border border-gray-200 p-3 rounded-lg text-sm outline-none focus:border-black transition-colors"
+                />
+              </div>
+            </div>
+
+            <hr className="border-gray-100" />
+
+            {/* Sizes Section */}
+            <div className="space-y-4">
+               <h3 className="text-xs font-bold uppercase tracking-widest text-gray-500">Tailles</h3>
+               <div className="flex flex-wrap gap-2">
+                  {[...CLOTHING_SIZES, ...SHOE_SIZES].map(size => (
+                    <button
+                      key={size}
+                      onClick={() => toggleFilter('sizes', size)}
+                      className={`px-3 py-2 rounded-md text-xs font-bold border transition-all ${filters.sizes.includes(size) ? 'bg-black text-white border-black' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'}`}
+                    >
+                      {size}
+                    </button>
+                  ))}
+               </div>
+            </div>
+
+            <hr className="border-gray-100" />
+
+            {/* Colors Section */}
+            <div className="space-y-4">
+               <h3 className="text-xs font-bold uppercase tracking-widest text-gray-500">Couleurs</h3>
+               <div className="flex flex-wrap gap-3">
+                  {AVAILABLE_COLORS.map(color => (
+                    <button
+                      key={color}
+                      onClick={() => toggleFilter('colors', color)}
+                      className={`px-4 py-2 rounded-full text-xs font-bold border transition-all flex items-center gap-2 ${filters.colors.includes(color) ? 'bg-black text-white border-black' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'}`}
+                    >
+                      <span className="w-3 h-3 rounded-full border border-gray-100" style={{backgroundColor: color === 'Blanc' ? '#fff' : color === 'Noir' ? '#000' : color.toLowerCase()}}></span>
+                      {color}
+                    </button>
+                  ))}
+               </div>
+            </div>
+
+          </div>
+
+          <div className="p-6 bg-gray-50 border-t border-gray-100 flex gap-4">
+             <button onClick={clearFilters} className="px-6 py-4 rounded-xl font-bold text-xs uppercase tracking-widest bg-white border border-gray-200 text-gray-500 hover:text-black hover:border-black transition-colors">
+               Réinitialiser
+             </button>
+             <button onClick={onClose} className="flex-1 bg-black text-white rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-[#c4a47c] transition-colors shadow-lg">
+               Afficher ({resultsCount})
+             </button>
+          </div>
+        </div>
+    </div>
+  );
+};
+
+
+// --- Composant CartDrawer ---
 const CartDrawer = ({ isOpen, onClose, cart, removeFromCart, user }) => {
   const [formData, setFormData] = useState({ name: '', phone: '', wilaya: '', commune: '' });
   const [orderComplete, setOrderComplete] = useState(false);
@@ -1018,19 +1142,19 @@ const CartDrawer = ({ isOpen, onClose, cart, removeFromCart, user }) => {
 
   const handleOrder = async () => {
     if (!formData.name || !formData.phone || !formData.wilaya || !formData.commune) {
-      alert("Veuillez remplir tous les champs.");
+      alert("يرجى ملء جميع الحقول.");
       return;
     }
 
     // New validation logic
     const phoneRegex = /^(05|06|07)[0-9]{8}$/;
     if (!phoneRegex.test(formData.phone)) {
-        alert("Le numéro de téléphone doit être au format (05XXXXXXXX, 06XXXXXXXX, 07XXXXXXXX).");
+        alert("يجب أن يكون رقم الهاتف بالصيغة (05XXXXXXXX, 06XXXXXXXX, 07XXXXXXXX).");
         return;
     }
     
     if (!user) {
-        alert("Erreur d'authentification. Veuillez rafraîchir la page.");
+        alert("خطأ في المصادقة. يرجى تحديث الصفحة.");
         return;
     }
 
@@ -1062,16 +1186,16 @@ const CartDrawer = ({ isOpen, onClose, cart, removeFromCart, user }) => {
       setOrderComplete(true);
     } catch (e) {
       console.error(e);
-      alert("Erreur lors de l'envoi de la commande. Vérifiez votre connexion.");
+      alert("خطأ أثناء إرسال الطلب. تحقق من اتصالك بالإنترنت.");
     }
   };
 
   return (
-    <div className={`fixed inset-0 z-[100] transition-all duration-500 ${isOpen ? 'visible opacity-100' : 'invisible opacity-0'}`}>
+    <div className={`fixed inset-0 z-[100] transition-all duration-500 ${isOpen ? 'visible opacity-100' : 'invisible opacity-0'}`} dir="rtl">
         <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose}></div>
-        <div className={`absolute right-0 top-0 h-full w-full md:w-[450px] bg-white shadow-2xl flex flex-col transition-transform duration-500 ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+        <div className={`absolute left-0 top-0 h-full w-full md:w-[450px] bg-white shadow-2xl flex flex-col transition-transform duration-500 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}>
           <div className="p-8 flex justify-between items-center border-b border-gray-100">
-            <h2 className="logo-font text-3xl italic">Votre Sélection</h2>
+            <h2 className="logo-font text-3xl italic">سلة المشتريات</h2>
             <button onClick={onClose} className="hover:rotate-90 transition duration-500"><X className="text-gray-400" strokeWidth={1} /></button>
           </div>
 
@@ -1079,7 +1203,7 @@ const CartDrawer = ({ isOpen, onClose, cart, removeFromCart, user }) => {
             {cart.length === 0 ? (
                <div className="h-full flex flex-col items-center justify-center text-gray-300">
                   <ShoppingBag size={48} strokeWidth={1} className="mb-4" />
-                  <p className="italic font-light">Le panier est vide.</p>
+                  <p className="italic font-light">السلة فارغة.</p>
                </div>
             ) : (
                cart.map((item, i) => {
@@ -1093,8 +1217,8 @@ const CartDrawer = ({ isOpen, onClose, cart, removeFromCart, user }) => {
                       <div>
                           <p className="text-[10px] font-bold uppercase tracking-widest mb-1">{item.name}</p>
                           <p className="text-xs text-[#c4a47c]">{item.price.toLocaleString()} DZD</p>
-                          {item.selectedSize && <p className="text-[10px] text-gray-500 mt-1">Taille: {item.selectedSize}</p>}
-                          {item.selectedColor && <p className="text-[10px] text-gray-500 mt-1">Couleur: {item.selectedColor}</p>}
+                          {item.selectedSize && <p className="text-[10px] text-gray-500 mt-1">المقاس: {item.selectedSize}</p>}
+                          {item.selectedColor && <p className="text-[10px] text-gray-500 mt-1">اللون: {item.selectedColor}</p>}
                       </div>
                     </div>
                     <button onClick={() => removeFromCart(i)} className="text-gray-300 hover:text-red-500 transition"><Trash2 size={16} /></button>
@@ -1107,15 +1231,15 @@ const CartDrawer = ({ isOpen, onClose, cart, removeFromCart, user }) => {
              {cart.length > 0 && (
               <div className="space-y-2 border-b border-gray-200 pb-4">
                 <div className="flex justify-between text-xs text-gray-400">
-                  <span>Sous-total</span>
+                  <span>المجموع الفرعي</span>
                   <span>{subtotal.toLocaleString()} DZD</span>
                 </div>
                 <div className="flex justify-between text-xs text-gray-400">
-                  <span>Livraison ({deliveryType === 'home' ? 'Domicile' : 'Bureau'})</span>
+                  <span>التوصيل ({deliveryType === 'home' ? 'المنزل' : 'المكتب'})</span>
                   <span>{deliveryPrice.toLocaleString()} DZD</span>
                 </div>
                 <div className="flex justify-between items-end pt-2">
-                  <span className="text-xs uppercase font-bold text-gray-400">Total</span>
+                  <span className="text-xs uppercase font-bold text-gray-400">المجموع</span>
                   <span className="text-3xl font-bold tracking-tighter logo-font">{total.toLocaleString()} <span className="text-sm font-sans font-normal text-gray-500">DZD</span></span>
                 </div>
               </div>
@@ -1125,15 +1249,15 @@ const CartDrawer = ({ isOpen, onClose, cart, removeFromCart, user }) => {
               <div className="space-y-3 pt-2 animate-[slideUp_0.4s_ease-out]">
                 <input 
                   value={formData.name}
-                  placeholder="NOM COMPLET" 
-                  className="w-full bg-white border border-gray-200 p-4 text-[11px] font-bold tracking-widest outline-none focus:border-[#c4a47c] transition" 
+                  placeholder="الاسم الكامل" 
+                  className="w-full bg-white border border-gray-200 p-4 text-[11px] font-bold tracking-widest outline-none focus:border-[#c4a47c] transition text-right" 
                   onChange={e => setFormData({...formData, name: e.target.value})} 
                 />
                 <input 
                   type="tel"
                   value={formData.phone}
-                  placeholder="TÉLÉPHONE (05/06/07...)" 
-                  className="w-full bg-white border border-gray-200 p-4 text-[11px] font-bold tracking-widest outline-none focus:border-[#c4a47c] transition" 
+                  placeholder="رقم الهاتف (05/06/07...)" 
+                  className="w-full bg-white border border-gray-200 p-4 text-[11px] font-bold tracking-widest outline-none focus:border-[#c4a47c] transition text-right" 
                   onChange={e => setFormData({...formData, phone: e.target.value.replace(/[^0-9]/g, '')})} 
                 />
                 <div className="grid grid-cols-2 gap-3">
@@ -1142,7 +1266,7 @@ const CartDrawer = ({ isOpen, onClose, cart, removeFromCart, user }) => {
                       value={formData.wilaya}
                       onChange={e => setFormData({...formData, wilaya: e.target.value, commune: ''})}
                     >
-                      <option value="">SÉLECTIONNER WILAYA</option>
+                      <option value="">اختر الولاية</option>
                       {WILAYAS.map(w => (
                         <option key={w} value={w}>{w}</option>
                       ))}
@@ -1154,7 +1278,7 @@ const CartDrawer = ({ isOpen, onClose, cart, removeFromCart, user }) => {
                       onChange={e => setFormData({...formData, commune: e.target.value})}
                       disabled={!formData.wilaya}
                     >
-                      <option value="">SÉLECTIONNER COMMUNE</option>
+                      <option value="">اختر البلدية</option>
                       {availableCommunes.map(c => (
                         <option key={c} value={c}>{c}</option>
                       ))}
@@ -1166,32 +1290,32 @@ const CartDrawer = ({ isOpen, onClose, cart, removeFromCart, user }) => {
                     className={`p-3 border rounded-lg text-[10px] font-bold uppercase tracking-wide transition-all ${deliveryType === 'desk' ? 'border-[#c4a47c] bg-amber-50 text-[#c4a47c]' : 'border-gray-200 text-gray-400 hover:border-gray-300'}`}
                     onClick={() => setDeliveryType('desk')}
                   >
-                    Bureau (Stop Desk)<br/>
+                    المكتب (Stop Desk)<br/>
                     {formData.wilaya ? (
-                       <span className="text-xs">+{deskPrice} DZD</span>
+                        <span className="text-xs">+{deskPrice} DZD</span>
                     ) : (
-                       <span className="text-xs text-gray-300">Sélectionnez Wilaya</span>
+                        <span className="text-xs text-gray-300">يرجى اختيار الولاية</span>
                     )}
                   </button>
                   <button 
                     className={`p-3 border rounded-lg text-[10px] font-bold uppercase tracking-wide transition-all ${deliveryType === 'home' ? 'border-[#c4a47c] bg-amber-50 text-[#c4a47c]' : 'border-gray-200 text-gray-400 hover:border-gray-300'}`}
                     onClick={() => setDeliveryType('home')}
                   >
-                    À Domicile<br/>
+                    توصيل للمنزل<br/>
                     {formData.wilaya ? (
-                       <span className="text-xs">+{homePrice} DZD</span>
+                        <span className="text-xs">+{homePrice} DZD</span>
                     ) : (
-                       <span className="text-xs text-gray-300">Sélectionnez Wilaya</span>
+                        <span className="text-xs text-gray-300">يرجى اختيار الولاية</span>
                     )}
                   </button>
                 </div>
-
-                <button onClick={handleOrder} className="w-full bg-[#1a1a1a] text-white py-5 text-[10px] font-bold uppercase tracking-widest hover:bg-[#c4a47c] transition duration-300 mt-2">Confirmer l'Achat</button>
+                
+                <button onClick={handleOrder} className="w-full bg-[#1a1a1a] text-white py-5 text-[10px] font-bold uppercase tracking-widest hover:bg-[#c4a47c] transition duration-300 mt-2">تأكيد الشراء</button>
               </div>
             )}
 
             {!showCheckout && cart.length > 0 && (
-              <button onClick={() => setShowCheckout(true)} className="w-full bg-[#1a1a1a] text-white py-5 text-[10px] font-bold uppercase tracking-widest hover:bg-[#c4a47c] transition duration-300">Commander</button>
+              <button onClick={() => setShowCheckout(true)} className="w-full bg-[#1a1a1a] text-white py-5 text-[10px] font-bold uppercase tracking-widest hover:bg-[#c4a47c] transition duration-300">طلب</button>
             )}
 
             {orderComplete && (
@@ -1199,9 +1323,9 @@ const CartDrawer = ({ isOpen, onClose, cart, removeFromCart, user }) => {
                 <div className="w-12 h-12 bg-green-50 text-green-500 rounded-full flex items-center justify-center mx-auto mb-3">
                    <CheckCircle size={24} />
                 </div>
-                <p className="text-green-800 font-bold mb-2 uppercase text-xs tracking-widest">Commande Envoyée !</p>
-                <p className="text-xs text-gray-500">Nous vous contacterons sur votre numéro.</p>
-                <button onClick={() => {setOrderComplete(false); onClose(); setShowCheckout(false)}} className="mt-4 text-[10px] font-bold underline hover:text-[#c4a47c]">FERMER</button>
+                <p className="text-green-800 font-bold mb-2 uppercase text-xs tracking-widest">تم إرسال الطلب!</p>
+                <p className="text-xs text-gray-500">سنقوم بالاتصال بك على رقمك.</p>
+                <button onClick={() => {setOrderComplete(false); onClose(); setShowCheckout(false)}} className="mt-4 text-[10px] font-bold underline hover:text-[#c4a47c]">إغلاق</button>
               </div>
             )}
           </div>
@@ -1389,10 +1513,19 @@ const ProductDetails = ({ productId, onBack, onAddToCart, onOpenCart }) => {
 
 // --- Composant Store Front ---
 const StoreFront = ({ onAdminClick, onProductClick, cart, addToCart, onOpenCart, user }) => {
-  // Removed local Cart state and logic, now handled by App and CartDrawer
   const [selectedCategory, setSelectedCategory] = useState('Tout');
   const [products, setProducts] = useState([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
+  
+  // Filter State
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [filters, setFilters] = useState({
+    minPrice: '',
+    maxPrice: '',
+    sizes: [],
+    colors: []
+  });
+  const [sortOption, setSortOption] = useState('newest'); // 'newest', 'price-asc', 'price-desc'
   
   const defaultProducts = [
     { id: 'def1', name: 'Pantalon Chino Signature', price: 6500, image: 'https://images.unsplash.com/photo-1541099649105-f69ad21f3246?q=80&w=600', category: 'Pantalon' },
@@ -1418,14 +1551,41 @@ const StoreFront = ({ onAdminClick, onProductClick, cart, addToCart, onOpenCart,
 
   const allProducts = products.length > 0 ? products : defaultProducts;
   
-  // Added 'Tricot' to categories
   const PREDEFINED_CATEGORIES = ['Costumes', 'Chaussures', 'Accessoires', 'Chemises', 'Manteaux', 'Pantalon', 'Tricot'];
   const dynamicCategories = allProducts.map(p => p.category).filter(Boolean);
   const categories = ['Tout', ...new Set([...PREDEFINED_CATEGORIES, ...dynamicCategories])];
 
-  const displayProducts = selectedCategory === 'Tout' 
-    ? allProducts 
-    : allProducts.filter(p => p.category === selectedCategory);
+  // Logic de filtrage avancée
+  const filteredProducts = allProducts.filter(p => {
+     // Category Filter
+     if (selectedCategory !== 'Tout' && p.category !== selectedCategory) return false;
+
+     // Price Filter
+     const price = p.price || 0;
+     if (filters.minPrice && price < parseInt(filters.minPrice)) return false;
+     if (filters.maxPrice && price > parseInt(filters.maxPrice)) return false;
+
+     // Size Filter
+     if (filters.sizes.length > 0) {
+       if (!p.sizes || !p.sizes.some(s => filters.sizes.includes(s))) return false;
+     }
+
+     // Color Filter
+     if (filters.colors.length > 0) {
+       if (!p.colors || !p.colors.some(c => filters.colors.includes(c))) return false;
+     }
+
+     return true;
+  });
+
+  // Sort Logic
+  const displayProducts = [...filteredProducts].sort((a, b) => {
+     if (sortOption === 'price-asc') return a.price - b.price;
+     if (sortOption === 'price-desc') return b.price - a.price;
+     // 'newest' logic (assuming createdAt exists, else fallback to index logic via id if sortable)
+     if (a.createdAt && b.createdAt) return new Date(b.createdAt) - new Date(a.createdAt);
+     return 0; 
+  });
 
   const handleQuickAdd = (product) => {
     addToCart(product); 
@@ -1477,23 +1637,36 @@ const StoreFront = ({ onAdminClick, onProductClick, cart, addToCart, onOpenCart,
               </div>
             </div>
 
-            {/* Category Filter */}
-            <div className="mb-12 overflow-x-auto pb-4 no-scrollbar">
-              <div className="flex gap-4">
-                {categories.map(cat => (
-                  <button
-                    key={cat}
-                    onClick={() => setSelectedCategory(cat)}
-                    className={`px-6 py-2 rounded-full text-xs font-bold uppercase tracking-widest whitespace-nowrap transition-all ${
-                      selectedCategory === cat 
-                        ? 'bg-black text-white shadow-lg transform scale-105' 
-                        : 'bg-white text-gray-500 border border-gray-200 hover:border-black hover:text-black'
-                    }`}
-                  >
-                    {cat}
-                  </button>
-                ))}
+            {/* Category Filter & Sort Button */}
+            <div className="mb-12 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div className="overflow-x-auto pb-2 no-scrollbar w-full md:w-auto">
+                <div className="flex gap-4">
+                  {categories.map(cat => (
+                    <button
+                      key={cat}
+                      onClick={() => setSelectedCategory(cat)}
+                      className={`px-6 py-2 rounded-full text-xs font-bold uppercase tracking-widest whitespace-nowrap transition-all ${
+                        selectedCategory === cat 
+                          ? 'bg-black text-white shadow-lg transform scale-105' 
+                          : 'bg-white text-gray-500 border border-gray-200 hover:border-black hover:text-black'
+                      }`}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
               </div>
+
+              <button 
+                onClick={() => setIsFilterOpen(true)}
+                className="flex items-center gap-2 px-6 py-2 border border-gray-200 rounded-full hover:border-black transition-all text-xs font-bold uppercase tracking-widest group bg-white shadow-sm hover:shadow-md"
+              >
+                 <SlidersHorizontal size={14} className="group-hover:scale-110 transition-transform" /> 
+                 Filtrer & Trier
+                 {(filters.minPrice || filters.maxPrice || filters.sizes.length > 0 || filters.colors.length > 0) && (
+                   <span className="w-2 h-2 rounded-full bg-[#c4a47c]"></span>
+                 )}
+              </button>
             </div>
 
             {loadingProducts ? (
@@ -1501,7 +1674,7 @@ const StoreFront = ({ onAdminClick, onProductClick, cart, addToCart, onOpenCart,
             ) : (
               <>
                 {displayProducts.length === 0 ? (
-                  <div className="text-center py-20 text-gray-400 italic">Aucun produit trouvé dans cette catégorie.</div>
+                  <div className="text-center py-20 text-gray-400 italic">Aucun produit ne correspond à votre sélection.</div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-16 animate-fade-in">
                     {displayProducts.map((product) => {
@@ -1528,6 +1701,16 @@ const StoreFront = ({ onAdminClick, onProductClick, cart, addToCart, onOpenCart,
             )}
           </main>
         </>
+
+        <FilterDrawer 
+           isOpen={isFilterOpen} 
+           onClose={() => setIsFilterOpen(false)}
+           filters={filters}
+           setFilters={setFilters}
+           sortOption={sortOption}
+           setSortOption={setSortOption}
+           resultsCount={displayProducts.length}
+        />
 
       <footer id="footer" className="bg-[#0a0a0a] text-white py-24 px-6 border-t border-gray-900">
         <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-16">
