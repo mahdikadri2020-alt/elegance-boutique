@@ -519,7 +519,7 @@ const AdminPanel = ({ onBackToStore }) => {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 animate-fade-in">
             <div className="bg-white p-6 rounded-2xl shadow-sm border-l-4 border-amber-500">
               <p className="text-slate-500 text-sm">Ventes Totales</p>
-              <h3 className="text-3xl font-bold text-slate-800 mt-2">{orders.reduce((acc, curr) => acc + (curr.total || 0), 0).toLocaleString()} <span className="text-sm font-normal">DZD</span></h3>
+              <h3 className="text-3xl font-bold text-slate-800 mt-2">{orders.reduce((acc, curr) => acc + (curr.subtotal || 0), 0).toLocaleString()} <span className="text-sm font-normal">DZD</span></h3>
               <div className="mt-4 flex items-center text-green-500 text-xs font-bold gap-1"><TrendingUp size={14} /> <span>+12% ce mois</span></div>
             </div>
             <div className="bg-white p-6 rounded-2xl shadow-sm border-l-4 border-slate-800"><p className="text-slate-500 text-sm">Produits Actifs</p><h3 className="text-3xl font-bold text-slate-800 mt-2">{products.length}</h3></div>
