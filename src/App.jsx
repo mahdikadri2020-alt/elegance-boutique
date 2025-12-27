@@ -33,7 +33,7 @@ const db = getFirestore(app);
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
 // --- Global Constants (Shared between Admin & Store) ---
-const CLOTHING_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL'];
+const CLOTHING_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL', '4XL'];
 const SHOE_SIZES = [];
 for (let i = 35; i <= 45; i += 1) { // Simplified to integers for cleaner UI, or keep 0.5 if needed
   SHOE_SIZES.push(i.toString());
