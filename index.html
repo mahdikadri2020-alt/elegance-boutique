@@ -12,12 +12,49 @@
     <link rel="apple-touch-icon" href="/logo192.png" />
     <link rel="manifest" href="/manifest.json" />
     <title>Élégance Boutique</title>
+    
+    <style>
+      body { margin: 0; padding: 0; background-color: #fcfcfc; }
+      .app-loader {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        width: 100vw;
+        flex-direction: column;
+        gap: 20px;
+      }
+      .spinner {
+        width: 50px;
+        height: 50px;
+        border: 3px solid rgba(196, 164, 124, 0.3);
+        border-radius: 50%;
+        border-top-color: #c4a47c; /* لون البراند الخاص بك */
+        animation: spin 1s ease-in-out infinite;
+      }
+      .loading-text {
+        font-family: serif;
+        font-style: italic;
+        color: #1a1a1a;
+        font-size: 14px;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+      }
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+    </style>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
-    <div id="root"></div>
+    
+    <div id="root">
+      <div class="app-loader">
+        <div class="spinner"></div>
+        <div class="loading-text">Élégance</div>
+      </div>
+    </div>
     
     <script type="module" src="/src/index.jsx"></script>
-    
   </body>
 </html>
