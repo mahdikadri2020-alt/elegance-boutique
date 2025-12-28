@@ -1,3 +1,4 @@
+import { upload } from "@vercel/blob/client"; // 1. استيراد دالة الرفع
 /* global __firebase_config, __app_id, __initial_auth_token */
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
@@ -35,7 +36,7 @@ const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 // --- Global Constants (Shared between Admin & Store) ---
 const CLOTHING_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL', '4XL'];
 const SHOE_SIZES = [];
-for (let i = 35; i <= 45; i += 1) { // Simplified to integers for cleaner UI, or keep 0.5 if needed
+for (let i = 35; i <= 45; i += 1) { 
   SHOE_SIZES.push(i.toString());
 }
 const AVAILABLE_COLORS = ['Noir', 'Blanc', 'Bleu', 'Rouge', 'Vert', 'Jaune', 'Gris', 'Beige', 'Marron', 'Rose'];
@@ -146,6 +147,19 @@ const GlobalStyles = () => (
     }
   `}</style>
 );
+
+// 2. دالة مساعدة لتحويل النص (Base64) إلى ملف حقيقي
+function dataURLtoFile(dataurl, filename) {
+    let arr = dataurl.split(','),
+        mime = arr[0].match(/:(.*?);/)[1],
+        bstr = atob(arr[1]),
+        n = bstr.length,
+        u8arr = new Uint8Array(n);
+    while(n--){
+        u8arr[n] = bstr.charCodeAt(n);
+    }
+    return new File([u8arr], filename, {type:mime});
+}
 
 // --- Composant Panel Admin ---
 const AdminPanel = ({ onBackToStore }) => {
@@ -302,6 +316,7 @@ const AdminPanel = ({ onBackToStore }) => {
     });
   };
 
+  // 3. الدالة الجديدة لرفع الصور إلى Vercel Blob
   const handleAddProduct = async (e) => {
     e.preventDefault();
     if (!user) return;
@@ -312,14 +327,36 @@ const AdminPanel = ({ onBackToStore }) => {
     }
 
     setIsSubmitting(true);
+    
     try {
+      const imageUrls = [];
+
+      // رفع الصور واحدة تلو الأخرى
+      for (let i = 0; i < newProduct.images.length; i++) {
+        // تحويل Base64 إلى ملف
+        const file = dataURLtoFile(newProduct.images[i], `product-${Date.now()}-${i}.jpg`);
+
+        // الرفع إلى Vercel Blob عبر الـ API
+        const newBlob = await upload(file.name, file, {
+          access: 'public',
+          handleUploadUrl: '/api/upload', 
+        });
+
+        imageUrls.push(newBlob.url); // حفظ الرابط الجديد
+      }
+
+      // حفظ بيانات المنتج في Firestore (مع الروابط الخفيفة)
       const productsRef = collection(db, 'artifacts', appId, 'public', 'data', 'products');
+      
       await addDoc(productsRef, {
         ...newProduct,
-        image: newProduct.images[0], // Fallback image principale
+        images: imageUrls,       // المصفوفة تحتوي الآن على روابط http
+        image: imageUrls[0],     // الصورة الرئيسية
         price: parseFloat(newProduct.price),
         createdAt: new Date().toISOString()
       });
+
+      // إعادة تعيين النموذج
       setNewProduct({
         name: '',
         price: '',
@@ -331,11 +368,13 @@ const AdminPanel = ({ onBackToStore }) => {
         colorImages: {}
       });
       setActiveTab('products');
+      alert("Produit ajouté avec succès !");
+
     } catch (error) {
-      console.error("Error adding product:", error);
-      alert("Erreur lors de l'ajout.");
+      console.error("Erreur:", error);
+      alert("Erreur lors de l'ajout: " + error.message);
     } finally {
-      setIsSubmitting(false);
+        setIsSubmitting(false);
     }
   };
 
@@ -1127,7 +1166,7 @@ const CartDrawer = ({ isOpen, onClose, cart, removeFromCart, user }) => {
         feesMap[doc.id] = doc.data();
       });
       setDeliveryFees(feesMap);
-    });
+    }, (error) => console.error("Fees fetch error:", error));
     return () => unsubscribeFees();
   }, [user]);
 
