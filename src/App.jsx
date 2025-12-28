@@ -1,5 +1,3 @@
-import { upload } from "@vercel/blob/client"; // 1. استيراد دالة الرفع
-/* global __firebase_config, __app_id, __initial_auth_token */
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   LayoutDashboard, Package, PlusCircle, ShoppingCart, Trash2, 
@@ -16,6 +14,22 @@ import {
   getAuth, signInAnonymously, signInWithCustomToken, 
   onAuthStateChanged 
 } from 'firebase/auth';
+
+// --- Vercel Blob Mock for Preview Environment ---
+// In a real environment with @vercel/blob installed, uncomment the import below and remove this mock function.
+// import { upload } from "@vercel/blob/client"; 
+
+const upload = async (filename, file, options) => {
+  console.log("Simulating upload for preview environment:", filename);
+  // Simulates an upload by returning the local Data URL
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      resolve({ url: reader.result });
+    };
+    reader.readAsDataURL(file);
+  });
+};
 
 // --- Configuration Firebase ---
 const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
@@ -350,8 +364,8 @@ const AdminPanel = ({ onBackToStore }) => {
       
       await addDoc(productsRef, {
         ...newProduct,
-        images: imageUrls,       // المصفوفة تحتوي الآن على روابط http
-        image: imageUrls[0],     // الصورة الرئيسية
+        images: imageUrls,        // المصفوفة تحتوي الآن على روابط http
+        image: imageUrls[0],      // الصورة الرئيسية
         price: parseFloat(newProduct.price),
         createdAt: new Date().toISOString()
       });
@@ -1176,7 +1190,14 @@ const CartDrawer = ({ isOpen, onClose, cart, removeFromCart, user }) => {
                             : {}; 
   const homePrice = currentWilayaFees.home !== undefined ? currentWilayaFees.home : 800;
   const deskPrice = currentWilayaFees.desk !== undefined ? currentWilayaFees.desk : 400;
-  const deliveryPrice = deliveryType === 'home' ? homePrice : deskPrice;
+  
+  // Calculate theoretical delivery price based on selection
+  const selectedDeliveryPrice = deliveryType === 'home' ? homePrice : deskPrice;
+  
+  // Only add delivery to total if location is selected
+  const isLocationSelected = formData.wilaya && formData.commune;
+  const deliveryPrice = isLocationSelected ? selectedDeliveryPrice : 0;
+  
   const total = subtotal + deliveryPrice;
 
   const handleOrder = async () => {
@@ -1275,7 +1296,7 @@ const CartDrawer = ({ isOpen, onClose, cart, removeFromCart, user }) => {
                 </div>
                 <div className="flex justify-between text-xs text-gray-400">
                   <span>التوصيل ({deliveryType === 'home' ? 'المنزل' : 'المكتب'})</span>
-                  <span>{deliveryPrice.toLocaleString()} DZD</span>
+                  <span>{isLocationSelected ? `${deliveryPrice.toLocaleString()} DZD` : '---'}</span>
                 </div>
                 <div className="flex justify-between items-end pt-2">
                   <span className="text-xs uppercase font-bold text-gray-400">المجموع</span>
