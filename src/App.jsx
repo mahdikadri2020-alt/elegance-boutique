@@ -1300,7 +1300,10 @@ const CartDrawer = ({ isOpen, onClose, cart, removeFromCart, user }) => {
                 </div>
                 <div className="flex justify-between items-end pt-2">
                   <span className="text-xs uppercase font-bold text-gray-400">المجموع</span>
-                  <span className="text-3xl font-bold tracking-tighter logo-font">{total.toLocaleString()} <span className="text-sm font-sans font-normal text-gray-500">DZD</span></span>
+                  <span className="text-3xl font-bold tracking-tighter logo-font">
+                    {total.toLocaleString()} 
+                    <span className="text-sm font-sans font-normal text-gray-500"> DZD</span>
+                  </span>
                 </div>
               </div>
              )}
